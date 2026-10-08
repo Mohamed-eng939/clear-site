@@ -25,6 +25,16 @@
   var TERMS = "Payments are non-refundable, except where the law gives the student a right to cancel (written request within 14 days of paying; unused lessons refunded minus payment fees, delivered lessons charged at one eighth of the level price each). Unused lessons can be transferred to another learner referred by the student. Lessons are rescheduled through the academy with at least 24 hours' notice. The 8 lessons of a level are valid for 10 weeks. A pause of up to one month is allowed and counts within them. If the academy cannot deliver paid lessons, they are refunded or rescheduled.";
   var WHATSAPP = "https://wa.me/201120223509";
   var CONTACT_EMAIL = "clearacademy7@gmail.com";
+  var MKINDS = { slides: "Slides", handout: "Handout", worksheet: "Worksheet", homework: "Homework", recording: "Recording", other: "Other" };
+  var MAX_FILE = 50 * 1024 * 1024;
+  var EXT_MIME = {
+    pdf: "application/pdf", ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", txt: "text/plain",
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif",
+    mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", mp4: "video/mp4"
+  };
+  var FILE_ACCEPT = Object.keys(EXT_MIME).map(function (e) { return "." + e; }).join(",");
   var DOWS = [[1, "Monday"], [2, "Tuesday"], [3, "Wednesday"], [4, "Thursday"], [5, "Friday"], [6, "Saturday"], [0, "Sunday"]];
   /* name, dial code, main time zone */
   var COUNTRIES = [
@@ -188,7 +198,7 @@
 
   /* ------------------------------------------------------------ state */
   var sb = null, session = null, me = null;
-  var S = { students: [], packages: [], payments: [], lessons: [], reports: [], notes: {}, settings: null };
+  var S = { students: [], packages: [], payments: [], lessons: [], reports: [], notes: {}, settings: null, materials: [] };
   var UI = { tab: "link", filter: "all", q: "", add: false, receipts: {}, draft: null, sent: "", sched: null };
   var root = null;
 
@@ -233,9 +243,11 @@
     return Promise.all([
       t("students", { col: "created_at", asc: false }), t("packages", { col: "created_at", asc: false }), t("payments", { col: "created_at", asc: false }),
       t("lessons", { col: "starts_at", asc: true }), t("reports", { col: "created_at", asc: false }), t("student_notes"),
-      admin ? t("settings") : Promise.resolve({ data: [], error: null })
+      admin ? t("settings") : Promise.resolve({ data: [], error: null }),
+      t("materials", { col: "created_at", asc: false })
     ]).then(function (r) {
       S.settings = (unwrap(r[6]) || [])[0] || null;
+      S.materials = unwrap(r[7]) || [];
       S.students = unwrap(r[0]) || []; S.packages = unwrap(r[1]) || []; S.payments = unwrap(r[2]) || [];
       S.lessons = unwrap(r[3]) || []; S.reports = unwrap(r[4]) || [];
       S.notes = {}; (unwrap(r[5]) || []).forEach(function (n) { S.notes[n.student_id] = n.body; });
@@ -397,7 +409,7 @@
     var reps = S.reports.filter(function (r) { return r.student_id === s.id; });
     return '<div class="panel"><div class="acts noprint"><button type="button" class="btn sec sm back" data-act="back">Back to students</button></div>' +
       "<div><h2>" + esc(s.full_name) + '</h2><div class="pills" style="margin-top:8px">' + statusPill(s.status) + (s.user_id ? '<span class="pill ok">Has signed in</span>' : '<span class="pill">Not signed in yet</span>') + "</div></div>" +
-      detailsSection(s) + packagesSection(s, pkgs, pays) + lessonsSection(s, pkgs, les) + reportsSection(s, reps) + notesSection(s) + dangerSection(s) + "</div>";
+      detailsSection(s) + packagesSection(s, pkgs, pays) + lessonsSection(s, pkgs, les) + materialsSection(s, les) + reportsSection(s, reps) + notesSection(s) + dangerSection(s) + "</div>";
   }
   function detailsSection(s) {
     return '<div class="sec"><h3>Details</h3><form data-form="savestudent" data-id="' + s.id + '"><div class="fields">' +
@@ -655,7 +667,7 @@
       if (ua !== ub) return ua ? -1 : 1;
       return ua ? (a.starts_at < b.starts_at ? -1 : 1) : (a.starts_at < b.starts_at ? 1 : -1);
     }).map(function (l) {
-      return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " · " + l.duration_min + ' min</span><select data-change="lstatus" data-id="' + l.id + '" aria-label="Lesson status" style="width:auto">' + opt(Object.keys(LSTATUS), l.status, LSTATUS) + "</select></div>" +
+      return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " · " + l.duration_min + ' min</span><select data-change="lstatus" data-id="' + l.id + '" aria-label="Lesson status" style="width:auto">' + opt(Object.keys(LSTATUS), l.status, LSTATUS) + "</select></div>" + lessonFiles(l) +
         '<form data-form="savelesson" data-id="' + l.id + '"><div class="fields"><div class="f"><label for="lt' + l.id + '">Topic</label><input id="lt' + l.id + '" name="topic" value="' + esc(l.topic) + '"></div>' +
         '<div class="f"><label for="lm' + l.id + '">Meeting link</label><input id="lm' + l.id + '" name="meeting_url" type="url" value="' + esc(l.meeting_url) + '"></div>' +
         '<div class="f wide"><label for="ls' + l.id + '">Note the student will see</label><textarea id="ls' + l.id + '" name="summary">' + esc(l.summary) + "</textarea></div></div>" +
@@ -671,6 +683,67 @@
       '<div class="f"><label for="lp">Package</label><select id="lp" name="package_id">' + opts.replace('value="' + (ap ? ap.id : "") + '"', 'value="' + (ap ? ap.id : "") + '" selected') + "</select></div>" +
       '<div class="f"><label for="lto">Topic</label><input id="lto" name="topic"></div></div>' +
       '<p class="hint">Egypt time. Students can switch the lessons to their own time zone.</p><div class="acts"><button class="btn sec" type="submit">Schedule lesson</button></div></form></div>';
+  }
+
+  /* ---- materials: files from your device, opened by the student */
+  function fmtSize(n) { n = Number(n) || 0; return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB"; }
+  function lessonLabel(id) { var l = byId(S.lessons, id); return l ? fmtDT(l.starts_at) : ""; }
+  function lessonFiles(l) {
+    var list = S.materials.filter(function (m) { return m.lesson_id === l.id; });
+    if (!list.length) return "";
+    return '<div class="files">' + list.map(function (m) { return '<button type="button" class="linkbtn" data-act="openfile" data-id="' + m.id + '">&#128206; ' + esc(m.title) + "</button>"; }).join("") + "</div>";
+  }
+  function materialRow(m, admin) {
+    var ll = m.lesson_id ? lessonLabel(m.lesson_id) : "";
+    return '<div class="card"><div class="l1"><span class="t">' + esc(m.title) + '</span><span class="pills"><span class="pill">' + esc(MKINDS[m.kind] || m.kind) + "</span></span></div>" +
+      '<span class="hint">' + esc(m.file_name) + " · " + esc(fmtSize(m.size_bytes)) + (ll ? " · lesson " + esc(ll) : "") + " · added " + esc((m.created_at || "").slice(0, 10)) + "</span>" +
+      (m.note ? "<p>" + esc(m.note) + "</p>" : "") +
+      '<div class="acts"><button type="button" class="btn sm" data-act="openfile" data-id="' + m.id + '">Open or download</button>' +
+      (admin ? '<button type="button" class="btn danger sm" data-act="delmat" data-id="' + m.id + '">Delete</button>' : "") + "</div></div>";
+  }
+  function materialsSection(s, les) {
+    var mine = S.materials.filter(function (m) { return m.student_id === s.id; });
+    var now = new Date().toISOString();
+    var up = les.filter(function (l) { return l.status === "scheduled" && l.starts_at >= now; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
+    var past = les.filter(function (l) { return !(l.status === "scheduled" && l.starts_at >= now); }).sort(function (a, b) { return a.starts_at < b.starts_at ? 1 : -1; });
+    var lopts = '<option value="">Not tied to one lesson</option>' + up.concat(past).map(function (l, i) {
+      return '<option value="' + l.id + '"' + (i === 0 && up.length ? " selected" : "") + ">" + esc(fmtDT(l.starts_at)) + "</option>";
+    }).join("");
+    return '<div class="sec"><h3>Materials</h3><div class="cards">' + (mine.map(function (m) { return materialRow(m, true); }).join("") || '<p class="hint">No files yet. Upload slides or a handout and the student can open them from their page.</p>') + "</div>" +
+      '<form data-form="addmaterial" data-id="' + s.id + '" class="addbox"><div class="fields">' +
+      '<div class="f wide"><label for="mf">File from your device</label><input id="mf" name="file" type="file" accept="' + FILE_ACCEPT + '" required><span class="hint">PowerPoint, PDF, Word, Excel, images, audio or short video. Up to 50 MB.</span></div>' +
+      '<div class="f"><label for="mt">Title (optional)</label><input id="mt" name="title" placeholder="Uses the file name"></div>' +
+      '<div class="f"><label for="mk">Type</label><select id="mk" name="kind">' + opt(Object.keys(MKINDS), "slides", MKINDS) + "</select></div>" +
+      '<div class="f"><label for="ml">For which lesson</label><select id="ml" name="lesson_id">' + lopts + "</select></div>" +
+      '<div class="f wide"><label for="mn">Note the student will see (optional)</label><textarea id="mn" name="note"></textarea></div></div>' +
+      '<div class="acts"><button class="btn" type="submit">Upload file</button></div></form></div>';
+  }
+  function uid() { return (window.crypto && crypto.randomUUID) ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10); }
+  function uploadMaterial(sid, d, done) {
+    var file = d.file;
+    if (!file || !file.size) { toast("Choose a file from your device first.", true); return done(); }
+    var ext = (file.name.split(".").pop() || "").toLowerCase(), mime = EXT_MIME[ext];
+    if (!mime) { toast("That file type is not supported. Use PowerPoint, PDF, Word, Excel, an image, audio or mp4.", true); return done(); }
+    if (file.size > MAX_FILE) { toast("That file is over 50 MB. Compress it or share a link instead.", true); return done(); }
+    var path = sid + "/" + uid() + "-" + file.name.replace(/[^\w.\-]+/g, "-");
+    toast("Uploading " + file.name + "…");
+    var bucket = sb.storage.from("materials");
+    bucket.upload(path, file, { contentType: mime, upsert: false }).then(function (r) {
+      if (r.error) throw new Error(r.error.message);
+      return sb.from("materials").insert({ student_id: sid, lesson_id: nul(d.lesson_id), title: d.title || file.name.replace(/\.[^.]+$/, ""), kind: d.kind, note: nul(d.note), file_path: path, file_name: file.name, mime: mime, size_bytes: file.size });
+    }).then(function (r) {
+      if (r.error) { bucket.remove([path]); throw new Error(r.error.message); }
+      toast("File uploaded."); return refresh();
+    }).catch(function (e) { toast(e.message || "Upload failed.", true); }).then(done, done);
+  }
+  function openMaterial(id) {
+    var m = byId(S.materials, id); if (!m) return;
+    var inline = /^(application\/pdf|image\/|audio\/|video\/)/.test(m.mime || "");
+    var w = window.open("", "_blank");
+    sb.storage.from("materials").createSignedUrl(m.file_path, 300, inline ? undefined : { download: m.file_name }).then(function (r) {
+      if (r.error || !r.data) { if (w) w.close(); return toast("Could not open that file. Try again.", true); }
+      if (w) { try { w.opener = null; } catch (e) { /* ignore */ } w.location.href = r.data.signedUrl; } else location.href = r.data.signedUrl;
+    }, function () { if (w) w.close(); toast("Could not open that file. Try again.", true); });
   }
 
   /* ---- reports */
@@ -825,11 +898,12 @@
     return '<div style="margin-top:20px;display:grid;gap:22px">' +
       '<div class="sum" style="margin:0"><div><span class="label">Hello</span><b>' + esc(s.full_name.split(" ")[0]) + '</b></div><div><span class="label">Your level</span><b>' + esc(s.cefr || "To be tested") + '</b></div><div><span class="label">Next lesson</span><b style="font-size:17px">' + (next ? esc(fmtDT(next.starts_at)) + "</b><small>Egypt time</small>" + (viewTz() !== EG ? "<small>" + converted(next.starts_at) + "</small>" : "") : "Not scheduled yet</b>") + "</div></div>" +
       '<div class="panel"><div class="sec"><h3>Your lessons</h3><div class="f" style="max-width:360px"><label for="vtz">Show lessons in my time zone</label><select id="vtz" data-change="viewtz">' + tzOptions(viewTz()) + '</select></div><p class="hint">Lessons are set in Egypt time.</p><div class="cards">' + (upcoming.concat(past).length ? upcoming.concat(past).map(function (l) {
-        return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " Egypt time · " + l.duration_min + ' min</span><span class="pill' + (l.status === "completed" ? " ok" : "") + '">' + esc(LSTATUS[l.status]) + "</span></div>" + (converted(l.starts_at) ? converted(l.starts_at) : "") +
+        return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " Egypt time · " + l.duration_min + ' min</span><span class="pill' + (l.status === "completed" ? " ok" : "") + '">' + esc(LSTATUS[l.status]) + "</span></div>" + (converted(l.starts_at) ? converted(l.starts_at) : "") + lessonFiles(l) +
           (l.topic ? '<span class="hint">' + esc(l.topic) + "</span>" : "") + (l.summary ? "<p>" + esc(l.summary) + "</p>" : "") +
           (l.meeting_url && l.status === "scheduled" ? '<div class="acts"><a class="btn sm" href="' + esc(l.meeting_url) + '" target="_blank" rel="noopener">Join lesson</a></div>' : "") + "</div>";
       }).join("") : '<p class="hint">Your lessons will appear here once they are scheduled.</p>') + "</div>" +
       '<p class="hint">To move a lesson, message the academy at least 24 hours before it starts. <a href="' + WHATSAPP + '" target="_blank" rel="noopener">WhatsApp the academy</a>.</p></div>' +
+      '<div class="sec"><h3>Your materials</h3><div class="cards">' + (S.materials.filter(function (m) { return m.student_id === s.id; }).map(function (m) { return materialRow(m, false); }).join("") || '<p class="hint">Slides and handouts from your lessons will appear here.</p>') + "</div></div>" +
       (pkgs.length ? '<div class="sec"><h3>Your package</h3><div class="cards">' + pkgs.map(function (p) {
         return '<div class="card"><div class="l1"><span class="t">' + esc(pkgLabel(p)) + '</span><span class="pill ' + (pkgIsPaid(p) ? "ok" : "warn") + '">' + (pkgIsPaid(p) ? "Paid" : "Payment due") + '</span></div><span class="hint">' + pkgUsed(p) + " of " + p.lessons_total + " lessons used" + (p.expires_on ? " · valid until " + esc(p.expires_on) : "") + "</span></div>";
       }).join("") + "</div></div>" : "") +
@@ -920,6 +994,11 @@
       if (!url) return toast("Save a default lesson link first.", true);
       return act(sb.from("lessons").update({ meeting_url: url }).eq("status", "scheduled").is("meeting_url", null), "Link added to your upcoming lessons.").then(refresh);
     }
+    if (a === "openfile") return openMaterial(id);
+    if (a === "delmat") return ask("Delete this file? The student will no longer see it.", "Delete file").then(function (ok) {
+      if (!ok) return; var m = byId(S.materials, id); if (!m) return;
+      sb.storage.from("materials").remove([m.file_path]).then(function () { return act(sb.from("materials").delete().eq("id", id), "File deleted."); }).then(refresh).catch(function (e) { toast(e.message || "Could not delete.", true); });
+    });
     if (a === "openreceipt") { location.hash = "#/receipt/" + id; return; }
     if (a === "copyr") { var c1 = payContext(id); return copyText(c1 && c1.s ? receiptText(c1.p, c1.s, c1.pkg) : ""); }
     if (a === "dlpng") {
@@ -940,7 +1019,9 @@
       if (ok) act(sb.from("lessons").delete().eq("id", id), "Lesson deleted.").then(refresh);
     });
     if (a === "delstudent") return ask("Delete this student with all packages, payments, lessons and reports? This cannot be undone.", "Delete student").then(function (ok) {
-      if (ok) act(sb.from("students").delete().eq("id", id), "Student deleted.").then(function () { location.hash = "#/students"; return refresh(); });
+      if (!ok) return;
+      var paths = S.materials.filter(function (m) { return m.student_id === id; }).map(function (m) { return m.file_path; });
+      Promise.resolve(paths.length ? sb.storage.from("materials").remove(paths) : null).then(function () { return act(sb.from("students").delete().eq("id", id), "Student deleted."); }).then(function () { location.hash = "#/students"; return refresh(); });
     });
   }
 
@@ -987,6 +1068,8 @@
           return sb.from("packages").update({ starts_on: day, expires_on: addDays(day, 70), status: p.status === "pending" ? "pending" : "active" }).eq("id", p.id);
         }
       }).then(refresh).then(done, done);
+    } else if (kind === "addmaterial") {
+      uploadMaterial(id, d, done);
     } else if (kind === "schedule") {
       submitSchedule(form, done);
     } else if (kind === "saverate") {

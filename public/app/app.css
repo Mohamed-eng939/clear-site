@@ -165,3 +165,6 @@ textarea{min-height:76px;resize:vertical}
 .srows{display:grid;gap:10px}
 .prev{margin:6px 0 0;padding-left:22px;display:grid;gap:4px}
 @media (max-width:620px){.srow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.srow .btn{grid-column:1/-1}}
+
+/* materials */
+.files{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px}
