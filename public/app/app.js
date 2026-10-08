@@ -63,17 +63,19 @@
   }
   function todayStr() { var d = new Date(); d = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return d.toISOString().slice(0, 10); }
   function addDays(dstr, n) { var d = new Date(dstr + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
-  function fmtDT(iso, withTz) {
-    var o = { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" };
-    if (withTz) o.timeZoneName = "short";
-    return new Date(iso).toLocaleString([], o);
+  /* every lesson time is Egypt time; students can convert it to their own zone */
+  var EG = "Africa/Cairo";
+  function fmtDT(iso, tz) {
+    return new Date(iso).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: tz || EG });
   }
-  function fmtDay(iso) { return new Date(iso).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }); }
-  function fmtTime(iso) { return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
-  function dayKey(iso) { var d = new Date(iso); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); }
+  function fmtDay(iso) { return new Date(iso).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: EG }); }
+  function fmtTime(iso) { return new Date(iso).toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: EG }); }
+  function dayKey(iso) { return new Date(iso).toLocaleDateString("en-CA", { timeZone: EG }); }
+  /* value for a datetime-local box, read as Egypt time */
   function localInputValue(date) {
-    var d = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-    return d.toISOString().slice(0, 16);
+    var o = {}; new Intl.DateTimeFormat("en-US", { timeZone: EG, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+      .formatToParts(date).forEach(function (x) { o[x.type] = x.value; });
+    return o.year + "-" + o.month + "-" + o.day + "T" + o.hour + ":" + o.minute;
   }
   function logo() { return $("#logoTpl").innerHTML; }
   function toast(msg, bad) {
@@ -562,7 +564,7 @@
     return {
       sid: s.id, pkgId: pkg.id,
       rows: has ? pkg.schedule.map(function (r) { return { dow: Number(r.dow), time: r.time, min: Number(r.min) || 60 }; }) : [{ dow: 1, time: "21:00", min: 60 }, { dow: 4, time: "21:00", min: 60 }],
-      tz: has ? pkg.schedule_tz : (countryTz(s.country) || "Africa/Cairo"), start: addDays(todayStr(), 1)
+      tz: EG, start: addDays(todayStr(), 1)
     };
   }
   function schedFor(s) {
@@ -575,7 +577,7 @@
   function readSched(form) {
     var f = new FormData(form), rows = [], i = 0;
     while (f.has("dow_" + i)) { rows.push({ dow: parseInt(f.get("dow_" + i), 10), time: String(f.get("time_" + i) || ""), min: parseInt(f.get("min_" + i), 10) || 60 }); i++; }
-    return { sid: form.getAttribute("data-id"), pkgId: f.get("pkg") || (UI.sched && UI.sched.pkgId), rows: rows, tz: f.get("tz") || "Africa/Cairo", start: f.get("start") || todayStr() };
+    return { sid: form.getAttribute("data-id"), pkgId: f.get("pkg") || (UI.sched && UI.sched.pkgId), rows: rows, tz: EG, start: f.get("start") || todayStr() };
   }
   function schedCounts(pkg) {
     var now = new Date(), mine = S.lessons.filter(function (l) { return l.package_id === pkg.id; });
@@ -596,19 +598,18 @@
     var c = schedCounts(pkg), n = pkg.lessons_total - c.have + c.upcoming;
     if (!st.rows.length) return '<p class="hint">Add at least one day.</p>';
     if (n <= 0) return '<p class="hint">All ' + pkg.lessons_total + " lessons of this package are already delivered.</p>";
-    var list = schedDates(st.rows, st.start, n), mine = myTz(), diff = false;
+    var list = schedDates(st.rows, st.start, n);
     if (!list.length) return '<p class="hint">Fill in the day and start time of each row.</p>';
     var items = list.map(function (l, i) {
-      var ms = zonedToMs(l.date, l.time, st.tz), end = ms + l.min * 60000, a = clock(ms, st.tz), b = clock(ms, mine), same = a === b;
-      if (!same) diff = true;
+      var ms = zonedToMs(l.date, l.time, EG), end = ms + l.min * 60000, a = clock(ms, EG);
       var day = new Date(l.date + "T00:00:00Z").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
-      return "<li>" + esc(day) + " · " + esc(a) + "–" + esc(clock(end, st.tz)) + (same ? "" : ' <span class="hint">(' + esc(b) + " your time)</span>") + "</li>";
+      return "<li>" + esc(day) + " · " + esc(a) + "–" + esc(clock(end, EG)) + "</li>";
     }).join("");
     var firstD = list[0].date, lastD = list[list.length - 1].date, lim = addDays(firstD, 70);
-    return "<p><b>" + list.length + " lessons</b> in " + esc(tzLabel(st.tz)) + ", from " + esc(firstD) + " to " + esc(lastD) + ". The 10 weeks end on " + esc(lim) + ".</p>" +
+    return "<p><b>" + list.length + " lessons</b> (Egypt time), from " + esc(firstD) + " to " + esc(lastD) + ". The 10 weeks end on " + esc(lim) + ".</p>" +
       (lastD > lim ? '<p class="err">The last lesson falls after the 10-week limit. Add another day per week or start earlier.</p>' : "") +
       (c.upcoming ? '<p class="hint">This replaces the ' + c.upcoming + " upcoming lessons already scheduled.</p>" : "") +
-      '<ol class="prev">' + items + "</ol>" + (diff ? '<p class="hint">Times in brackets are in your own time zone, so you can see them against your day.</p>' : "");
+      '<ol class="prev">' + items + "</ol>";
   }
   function scheduleSection(s) {
     var info = schedFor(s);
@@ -623,8 +624,8 @@
     var pkgSel = info.pkgs.length > 1 ? '<div class="f"><label for="spk">Package</label><select id="spk" name="pkg" data-change="schedpkg" data-id="' + s.id + '">' + info.pkgs.map(function (p) { return '<option value="' + p.id + '"' + (p.id === st.pkgId ? " selected" : "") + ">" + esc(pkgLabel(p)) + (pkgIsPaid(p) ? " · paid" : " · payment due") + "</option>"; }).join("") + "</select></div>" : "";
     return '<div class="sec"><h3>Weekly schedule</h3><form data-form="schedule" data-id="' + s.id + '" class="addbox">' + pkgSel +
       '<div class="srows">' + rows + '</div><div class="acts"><button type="button" class="btn sec sm" data-act="addday">Add another day</button></div>' +
-      '<div class="fields"><div class="f"><label for="stz">These times are in</label><select id="stz" name="tz">' + tzOptions(st.tz) + '</select></div>' +
-      '<div class="f"><label for="sst">First lesson on or after</label><input id="sst" name="start" type="date" value="' + esc(st.start) + '" required></div></div>' +
+      '<div class="fields"><div class="f"><label for="sst">First lesson on or after</label><input id="sst" name="start" type="date" value="' + esc(st.start) + '" required></div></div>' +
+      '<p class="hint">All times are Egypt time. Students see them in Egypt time and can convert them to their own.</p>' +
       '<div id="schedprev" aria-live="polite">' + schedPreview(st) + '</div><div class="acts"><button class="btn" type="submit">Create the lessons</button></div></form></div>';
   }
   function submitSchedule(form, done) {
@@ -637,7 +638,7 @@
     if (n <= 0) { toast("All lessons of this package are already delivered.", true); return done(); }
     var rows = st.rows.map(function (r) { return { dow: r.dow, time: r.time, min: r.min }; });
     var go = function (replace) {
-      return act(sb.from("packages").update({ schedule: rows, schedule_tz: st.tz }).eq("id", pkg.id), null).then(function () {
+      return act(sb.from("packages").update({ schedule: rows, schedule_tz: EG }).eq("id", pkg.id), null).then(function () {
         return act(sb.rpc("generate_lessons", { p_package: pkg.id, p_start: st.start, p_replace: replace }), null);
       }).then(function (made) { toast(made + " lessons scheduled."); return refresh(); });
     };
@@ -669,7 +670,7 @@
       '<div class="f"><label for="ld">Minutes</label><input id="ld" name="duration" type="number" min="15" max="180" step="5" value="60" required></div>' +
       '<div class="f"><label for="lp">Package</label><select id="lp" name="package_id">' + opts.replace('value="' + (ap ? ap.id : "") + '"', 'value="' + (ap ? ap.id : "") + '" selected') + "</select></div>" +
       '<div class="f"><label for="lto">Topic</label><input id="lto" name="topic"></div></div>' +
-      '<p class="hint">The time is in your own time zone. Students see it in theirs.</p><div class="acts"><button class="btn sec" type="submit">Schedule lesson</button></div></form></div>';
+      '<p class="hint">Egypt time. Students can switch the lessons to their own time zone.</p><div class="acts"><button class="btn sec" type="submit">Schedule lesson</button></div></form></div>';
   }
 
   /* ---- reports */
@@ -799,6 +800,16 @@
   }
 
   /* ------------------------------------------------------------ student view */
+  function viewTz() {
+    if (!UI.viewTz) { try { UI.viewTz = localStorage.getItem("clear-viewtz"); } catch (e) { /* storage blocked */ } }
+    try { new Intl.DateTimeFormat("en", { timeZone: UI.viewTz || "" }); } catch (e) { UI.viewTz = null; }
+    if (!UI.viewTz) UI.viewTz = myTz();
+    return UI.viewTz;
+  }
+  function converted(iso) {
+    var tz = viewTz(); if (tz === EG) return "";
+    return '<span class="hint">In your time, ' + esc(tzLabel(tz)) + ": <b>" + esc(fmtDT(iso, tz)) + "</b></span>";
+  }
   function viewMe() {
     var s = S.students[0];
     if (!s) {
@@ -812,9 +823,9 @@
     var pays = S.payments.filter(function (p) { return p.student_id === s.id; });
     var next = upcoming[0];
     return '<div style="margin-top:20px;display:grid;gap:22px">' +
-      '<div class="sum" style="margin:0"><div><span class="label">Hello</span><b>' + esc(s.full_name.split(" ")[0]) + '</b></div><div><span class="label">Your level</span><b>' + esc(s.cefr || "To be tested") + '</b></div><div><span class="label">Next lesson</span><b style="font-size:17px">' + (next ? esc(fmtDT(next.starts_at, true)) : "Not scheduled yet") + "</b></div></div>" +
-      '<div class="panel"><div class="sec"><h3>Your lessons</h3><div class="cards">' + (upcoming.concat(past).length ? upcoming.concat(past).map(function (l) {
-        return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at, true)) + " · " + l.duration_min + ' min</span><span class="pill' + (l.status === "completed" ? " ok" : "") + '">' + esc(LSTATUS[l.status]) + "</span></div>" +
+      '<div class="sum" style="margin:0"><div><span class="label">Hello</span><b>' + esc(s.full_name.split(" ")[0]) + '</b></div><div><span class="label">Your level</span><b>' + esc(s.cefr || "To be tested") + '</b></div><div><span class="label">Next lesson</span><b style="font-size:17px">' + (next ? esc(fmtDT(next.starts_at)) + "</b><small>Egypt time</small>" + (viewTz() !== EG ? "<small>" + converted(next.starts_at) + "</small>" : "") : "Not scheduled yet</b>") + "</div></div>" +
+      '<div class="panel"><div class="sec"><h3>Your lessons</h3><div class="f" style="max-width:360px"><label for="vtz">Show lessons in my time zone</label><select id="vtz" data-change="viewtz">' + tzOptions(viewTz()) + '</select></div><p class="hint">Lessons are set in Egypt time.</p><div class="cards">' + (upcoming.concat(past).length ? upcoming.concat(past).map(function (l) {
+        return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " Egypt time · " + l.duration_min + ' min</span><span class="pill' + (l.status === "completed" ? " ok" : "") + '">' + esc(LSTATUS[l.status]) + "</span></div>" + (converted(l.starts_at) ? converted(l.starts_at) : "") +
           (l.topic ? '<span class="hint">' + esc(l.topic) + "</span>" : "") + (l.summary ? "<p>" + esc(l.summary) + "</p>" : "") +
           (l.meeting_url && l.status === "scheduled" ? '<div class="acts"><a class="btn sm" href="' + esc(l.meeting_url) + '" target="_blank" rel="noopener">Join lesson</a></div>' : "") + "</div>";
       }).join("") : '<p class="hint">Your lessons will appear here once they are scheduled.</p>') + "</div>" +
@@ -845,6 +856,7 @@
   function onChange(e) {
     var t = e.target, ch = t.getAttribute("data-change");
     if (liveSchedule(e)) return;
+    if (ch === "viewtz") { UI.viewTz = t.value; try { localStorage.setItem("clear-viewtz", t.value); } catch (e) { /* storage blocked */ } return render(); }
     if (ch === "schedpkg") {
       var s9 = byId(S.students, t.getAttribute("data-id")), p9 = byId(S.packages, t.value);
       if (s9 && p9) { UI.sched = initSched(s9, p9); render(); }
@@ -966,7 +978,7 @@
     } else if (kind === "addpay") {
       addPayment(id, d).then(done, done);
     } else if (kind === "addlesson") {
-      var when = new Date(d.when);
+      var wp = String(d.when || "").split("T"), when = new Date(wp.length === 2 ? zonedToMs(wp[0], wp[1], EG) : NaN);
       if (isNaN(when.getTime())) { toast("Choose a date and time.", true); return done(); }
       act(sb.from("lessons").insert({ student_id: id, package_id: nul(d.package_id), starts_at: when.toISOString(), duration_min: parseInt(d.duration, 10) || 60, topic: nul(d.topic) }), "Lesson scheduled.").then(function () {
         var p = byId(S.packages, d.package_id);
