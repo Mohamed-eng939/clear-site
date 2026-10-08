@@ -187,7 +187,9 @@
       "<h1>Sign in to your academy</h1>" +
       '<div class="tabs" role="group" aria-label="Sign-in method"><button type="button" data-act="tab" data-v="link" aria-pressed="' + linkTab + '">Email me a link</button><button type="button" data-act="tab" data-v="pw" aria-pressed="' + !linkTab + '">Email and password</button></div>' +
       (UI.sent && linkTab
-        ? '<p>We sent a sign-in link to <b>' + esc(UI.sent) + '</b>. Open it on this device. It works once.</p><button type="button" class="linkbtn" data-act="again">Use a different email</button>'
+        ? '<p>We sent a sign-in code to <b>' + esc(UI.sent) + '</b>. Enter it below, or open the button in the email.</p>' +
+          '<form data-form="code" class="fields" style="grid-template-columns:1fr"><div class="f"><label for="cd">Code from the email</label><input id="cd" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" maxlength="8" required></div><button class="btn" type="submit">Sign in</button></form>' +
+          '<button type="button" class="linkbtn" data-act="again">Use a different email</button>'
         : '<form data-form="signin" class="fields" style="grid-template-columns:1fr">' +
           '<div class="f"><label for="em">Email</label><input id="em" name="email" type="email" required autocomplete="email" inputmode="email"></div>' +
           (linkTab ? "" : '<div class="f"><label for="pw">Password</label><input id="pw" name="password" type="password" required autocomplete="current-password"></div>') +
@@ -602,6 +604,7 @@
     e.preventDefault();
     var id = form.getAttribute("data-id"), d = formData(form), btn = form.querySelector('button[type="submit"]');
     if (kind === "signin") return doSignIn(d);
+    if (kind === "code") return doCode(d);
     if (btn) btn.disabled = true;
     var done = function () { if (btn) btn.disabled = false; };
     if (kind === "addstudent") {
@@ -656,6 +659,16 @@
     });
   }
 
+  function doCode(d) {
+    var btn = $('form[data-form="code"] button[type="submit"]'); if (btn) btn.disabled = true;
+    var token = String(d.code || "").replace(/\s+/g, "");
+    var fail = function (msg) { renderAuth(msg); };
+    var verify = function (type) { return sb.auth.verifyOtp({ email: UI.sent, token: token, type: type }); };
+    verify("email").then(function (r) { return r.error ? verify("signup") : r; }).then(function (r) {
+      if (r.error) return fail("That code is not right or has expired. Request a new one.");
+      session = r.data.session; UI.sent = ""; return enter();
+    }, function (er) { fail(er.message); });
+  }
   function doSignIn(d) {
     var btn = $('form[data-form="signin"] button[type="submit"]'); if (btn) btn.disabled = true;
     var fail = function (msg) { renderAuth(msg); };
