@@ -24,6 +24,27 @@
   var ISSUER = "Mohamed Tarek, trading as CLEAR English Academy";
   var TERMS = "Payments are non-refundable, except where the law gives the student a right to cancel (written request within 14 days of paying; unused lessons refunded minus payment fees, delivered lessons charged at one eighth of the level price each). Unused lessons can be transferred to another learner referred by the student. Lessons are rescheduled through the academy with at least 24 hours' notice. The 8 lessons of a level are valid for 10 weeks. A pause of up to one month is allowed and counts within them. If the academy cannot deliver paid lessons, they are refunded or rescheduled.";
   var WHATSAPP = "https://wa.me/201120223509";
+  var CONTACT_EMAIL = "clearacademy7@gmail.com";
+  var DOWS = [[1, "Monday"], [2, "Tuesday"], [3, "Wednesday"], [4, "Thursday"], [5, "Friday"], [6, "Saturday"], [0, "Sunday"]];
+  /* name, dial code, main time zone */
+  var COUNTRIES = [
+    ["Egypt", "+20", "Africa/Cairo"], ["Saudi Arabia", "+966", "Asia/Riyadh"], ["United Arab Emirates", "+971", "Asia/Dubai"], ["Kuwait", "+965", "Asia/Kuwait"],
+    ["Qatar", "+974", "Asia/Qatar"], ["Bahrain", "+973", "Asia/Bahrain"], ["Oman", "+968", "Asia/Muscat"], ["Jordan", "+962", "Asia/Amman"],
+    ["Lebanon", "+961", "Asia/Beirut"], ["Iraq", "+964", "Asia/Baghdad"], ["Syria", "+963", "Asia/Damascus"], ["Palestine", "+970", "Asia/Gaza"],
+    ["Yemen", "+967", "Asia/Aden"], ["Libya", "+218", "Africa/Tripoli"], ["Tunisia", "+216", "Africa/Tunis"], ["Algeria", "+213", "Africa/Algiers"],
+    ["Morocco", "+212", "Africa/Casablanca"], ["Sudan", "+249", "Africa/Khartoum"], ["Somalia", "+252", "Africa/Mogadishu"], ["Turkey", "+90", "Europe/Istanbul"],
+    ["Iran", "+98", "Asia/Tehran"], ["Pakistan", "+92", "Asia/Karachi"], ["India", "+91", "Asia/Kolkata"], ["Bangladesh", "+880", "Asia/Dhaka"],
+    ["Indonesia", "+62", "Asia/Jakarta"], ["Malaysia", "+60", "Asia/Kuala_Lumpur"], ["Singapore", "+65", "Asia/Singapore"], ["Philippines", "+63", "Asia/Manila"],
+    ["China", "+86", "Asia/Shanghai"], ["Japan", "+81", "Asia/Tokyo"], ["South Korea", "+82", "Asia/Seoul"], ["Australia", "+61", "Australia/Sydney"],
+    ["New Zealand", "+64", "Pacific/Auckland"], ["United Kingdom", "+44", "Europe/London"], ["Ireland", "+353", "Europe/Dublin"], ["France", "+33", "Europe/Paris"],
+    ["Germany", "+49", "Europe/Berlin"], ["Italy", "+39", "Europe/Rome"], ["Spain", "+34", "Europe/Madrid"], ["Portugal", "+351", "Europe/Lisbon"],
+    ["Netherlands", "+31", "Europe/Amsterdam"], ["Belgium", "+32", "Europe/Brussels"], ["Switzerland", "+41", "Europe/Zurich"], ["Austria", "+43", "Europe/Vienna"],
+    ["Sweden", "+46", "Europe/Stockholm"], ["Norway", "+47", "Europe/Oslo"], ["Denmark", "+45", "Europe/Copenhagen"], ["Greece", "+30", "Europe/Athens"],
+    ["Cyprus", "+357", "Asia/Nicosia"], ["Poland", "+48", "Europe/Warsaw"], ["Ukraine", "+380", "Europe/Kyiv"], ["Russia", "+7", "Europe/Moscow"],
+    ["Canada", "+1", "America/Toronto"], ["United States", "+1", "America/New_York"], ["Mexico", "+52", "America/Mexico_City"], ["Brazil", "+55", "America/Sao_Paulo"],
+    ["Argentina", "+54", "America/Argentina/Buenos_Aires"], ["South Africa", "+27", "Africa/Johannesburg"], ["Nigeria", "+234", "Africa/Lagos"],
+    ["Kenya", "+254", "Africa/Nairobi"], ["Ethiopia", "+251", "Africa/Addis_Ababa"]
+  ];
 
   /* ------------------------------------------------------------ helpers */
   var $ = function (s, r) { return (r || document).querySelector(s); };
@@ -93,10 +114,80 @@
     } catch (e) { toast("Download is not available here.", true); }
   }
 
+  function downloadBlob(name, blob) {
+    try {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1500);
+    } catch (e) { toast("Download is not available here.", true); }
+  }
+
+  /* ---- countries, phone numbers, time zones */
+  function countryByName(n) { return COUNTRIES.filter(function (c) { return c[0] === n; })[0] || null; }
+  function countryTz(n) { var c = countryByName(n); return c ? c[2] : null; }
+  function countryOptions(sel) {
+    var list = COUNTRIES.map(function (c) { return c[0]; });
+    if (sel && list.indexOf(sel) < 0) list.unshift(sel);          // keep an older free-text value
+    return '<option value="">Choose a country</option>' + opt(list, sel);
+  }
+  var DIALS = COUNTRIES.map(function (c) { return c[1]; }).filter(function (d, i, a) { return a.indexOf(d) === i; });
+  function dialOptions(sel) {
+    return COUNTRIES.map(function (c) { return c; }).filter(function (c, i, a) { return a.map(function (x) { return x[1]; }).indexOf(c[1]) === i; })
+      .sort(function (a, b) { return a[0] < b[0] ? -1 : 1; })
+      .map(function (c) { return '<option value="' + c[1] + '"' + (c[1] === sel ? " selected" : "") + ">" + esc(c[1] + " " + c[0]) + "</option>"; }).join("");
+  }
+  function splitPhone(phone, country) {
+    var p = String(phone || "").trim(), c = countryByName(country), dial = c ? c[1] : "+20";
+    if (/^(\+|00)/.test(p)) {
+      var digits = p.replace(/^(\+|00)/, "").replace(/\D/g, ""), best = null;
+      DIALS.forEach(function (d) { if (digits.indexOf(d.slice(1)) === 0 && (!best || d.length > best.length)) best = d; });
+      if (best) return { dial: best, num: digits.slice(best.length - 1) };
+    }
+    return { dial: dial, num: p.replace(/\D/g, "") };
+  }
+  function joinPhone(dial, num) {
+    var digits = String(num || "").replace(/\D/g, "").replace(/^0+/, "");
+    return digits ? dial + " " + digits : null;
+  }
+  function waLink(phone) { var d = String(phone || "").replace(/\D/g, ""); return d ? "https://wa.me/" + d : ""; }
+  function contactFields(pre, s) {
+    s = s || {};
+    var ph = splitPhone(s.phone, s.country);
+    return '<div class="f"><label for="' + pre + 'c">Country</label><select id="' + pre + 'c" name="country" data-change="country">' + countryOptions(s.country || "") + "</select></div>" +
+      '<div class="f wide"><label for="' + pre + 'n">WhatsApp number</label><div class="phone"><select name="dial" aria-label="Country code">' + dialOptions(ph.dial) + '</select><input id="' + pre + 'n" name="phone_local" inputmode="tel" autocomplete="off" value="' + esc(ph.num) + '" placeholder="Number without the country code"></div></div>';
+  }
+  function tzOffsetMs(ms, tz) {
+    var f = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" });
+    var o = {}; f.formatToParts(new Date(ms)).forEach(function (x) { o[x.type] = x.value; });
+    return Date.UTC(+o.year, +o.month - 1, +o.day, +o.hour, +o.minute, +o.second) - Math.floor(ms / 1000) * 1000;
+  }
+  /* "2026-10-12" + "21:00" read as a clock time in tz  ->  the real instant (ms) */
+  function zonedToMs(dateStr, timeStr, tz) {
+    var p = dateStr.split("-"), t = timeStr.split(":");
+    var guess = Date.UTC(+p[0], +p[1] - 1, +p[2], +t[0], +t[1] || 0);
+    var ms = guess - tzOffsetMs(guess, tz);
+    return guess - tzOffsetMs(ms, tz);
+  }
+  function clock(ms, tz) { return new Date(ms).toLocaleTimeString("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).toLowerCase(); }
+  function myTz() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Cairo"; } catch (e) { return "Africa/Cairo"; } }
+  function tzLabel(tz) {
+    var city = tz.split("/").pop().replace(/_/g, " "), off = "";
+    try { off = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" }).formatToParts(new Date()).filter(function (x) { return x.type === "timeZoneName"; })[0].value; } catch (e) { /* no offset label */ }
+    return city + (off ? " (" + off.replace("GMT", "UTC") + ")" : "");
+  }
+  function tzOptions(sel) {
+    var list = COUNTRIES.map(function (c) { return c[2]; }).filter(function (t, i, a) { return a.indexOf(t) === i; });
+    if (sel && list.indexOf(sel) < 0) list.push(sel);
+    var labels = {}; list.forEach(function (t) { labels[t] = tzLabel(t); });
+    list.sort(function (a, b) { return labels[a] < labels[b] ? -1 : 1; });
+    return opt(list, sel, labels);
+  }
+
   /* ------------------------------------------------------------ state */
   var sb = null, session = null, me = null;
-  var S = { students: [], packages: [], payments: [], lessons: [], reports: [], notes: {} };
-  var UI = { tab: "link", filter: "all", q: "", add: false, receipts: {}, draft: null, sent: "" };
+  var S = { students: [], packages: [], payments: [], lessons: [], reports: [], notes: {}, settings: null };
+  var UI = { tab: "link", filter: "all", q: "", add: false, receipts: {}, draft: null, sent: "", sched: null };
   var root = null;
 
   /* ------------------------------------------------------------ business rules */
@@ -106,9 +197,9 @@
     var off = offOverride != null ? offOverride : pk.off;
     return { list: p.usd * levels, off: off, usd: Math.round(p.usd * levels * (1 - off)), egp: Math.round(p.egp * levels * (1 - off)) };
   }
-  function pkgPaidFraction(pkg) {
+  function pkgPaidFraction(pkg, upTo) {
     var egp = Math.round((PRICES[pkg.program] || PRICES.general).egp * pkg.levels * (1 - Number(pkg.discount_pct) / 100));
-    return S.payments.filter(function (p) { return p.package_id === pkg.id; }).reduce(function (a, p) {
+    return S.payments.filter(function (p) { return p.package_id === pkg.id && (!upTo || p.created_at <= upTo); }).reduce(function (a, p) {
       return a + (p.currency === "EGP" ? Number(p.amount) / (egp || 1) : Number(p.amount) / (Number(pkg.price_usd) || 1));
     }, 0);
   }
@@ -119,6 +210,9 @@
   }
   function pkgUsed(pkg) { return S.lessons.filter(function (l) { return l.package_id === pkg.id && USED.indexOf(l.status) >= 0; }).length; }
   function pkgIsPaid(pkg) { return pkgPaidFraction(pkg) >= 0.999; }
+  /* USD payments keep the rate they were recorded at; EGP payments are already in EGP */
+  function rateOf(p) { return Number(p.egp_rate) || (S.settings && Number(S.settings.usd_egp_rate)) || 0; }
+  function egpOf(p) { return p.currency === "EGP" ? Number(p.amount) : Math.round(Number(p.amount) * rateOf(p)); }
   function byId(list, id) { return list.filter(function (x) { return x.id === id; })[0]; }
   function studentName(id) { var s = byId(S.students, id); return s ? s.full_name : "Unknown"; }
   function activePackage(sid) {
@@ -133,10 +227,13 @@
       var q = sb.from(name).select("*"); if (order) q = q.order(order.col, { ascending: order.asc });
       return q;
     };
+    var admin = me && me.role === "admin";
     return Promise.all([
       t("students", { col: "created_at", asc: false }), t("packages", { col: "created_at", asc: false }), t("payments", { col: "created_at", asc: false }),
-      t("lessons", { col: "starts_at", asc: true }), t("reports", { col: "created_at", asc: false }), t("student_notes")
+      t("lessons", { col: "starts_at", asc: true }), t("reports", { col: "created_at", asc: false }), t("student_notes"),
+      admin ? t("settings") : Promise.resolve({ data: [], error: null })
     ]).then(function (r) {
+      S.settings = (unwrap(r[6]) || [])[0] || null;
       S.students = unwrap(r[0]) || []; S.packages = unwrap(r[1]) || []; S.payments = unwrap(r[2]) || [];
       S.lessons = unwrap(r[3]) || []; S.reports = unwrap(r[4]) || [];
       S.notes = {}; (unwrap(r[5]) || []).forEach(function (n) { S.notes[n.student_id] = n.body; });
@@ -228,11 +325,12 @@
   function render() {
     if (!me) return renderAuth();
     var r = route();
-    if (me.role !== "admin") { root.innerHTML = shell(viewMe(), "me"); return; }
+    if (me.role !== "admin") { root.innerHTML = shell(r.name === "receipt" && r.a ? viewReceipt(r.a) : viewMe(), "me"); return; }
     var html;
     if (r.name === "lessons") html = shell(viewLessons(), "lessons");
     else if (r.name === "payments") html = shell(viewPayments(), "payments");
     else if (r.name === "account") html = shell(viewAccount(), "account");
+    else if (r.name === "receipt" && r.a) html = shell(viewReceipt(r.a), "payments");
     else if (r.name === "report" && r.a) html = shell(viewReport(r.a, r.b === "edit"), "students");
     else html = shell(viewStudents(r.name === "students" ? r.a : ""), "students");
     root.innerHTML = html;
@@ -244,9 +342,9 @@
     var active = S.students.filter(function (s) { return s.status === "active"; }).length;
     var awaiting = S.packages.filter(function (p) { return p.status !== "cancelled" && p.status !== "expired" && !pkgIsPaid(p); }).length;
     var lw = S.lessons.filter(function (l) { var d = new Date(l.starts_at); return l.status === "scheduled" && d >= now && d <= wk; }).length;
-    var usd = 0, egp = 0;
-    S.payments.forEach(function (p) { if ((p.paid_on || "").slice(0, 7) === mo) { if (p.currency === "EGP") egp += Number(p.amount); else usd += Number(p.amount); } });
-    return { active: active, awaiting: awaiting, lw: lw, usd: usd, egp: egp };
+    var usd = 0, egp = 0, all = 0;
+    S.payments.forEach(function (p) { if ((p.paid_on || "").slice(0, 7) === mo) { all += egpOf(p); if (p.currency === "EGP") egp += Number(p.amount); else usd += Number(p.amount); } });
+    return { active: active, awaiting: awaiting, lw: lw, usd: usd, egp: egp, all: all };
   }
   function statusPill(st) { return '<span class="pill' + (st === "active" ? " ok" : st === "lead" || st === "test" ? " warn" : "") + '">' + esc(STATUS[st] || st) + "</span>"; }
   function studentRows() {
@@ -269,7 +367,7 @@
   }
   function viewStudents(id) {
     var st = stats();
-    var sum = '<div class="sum"><div><span class="label">Active students</span><b>' + st.active + '</b></div><div><span class="label">Payment due</span><b>' + st.awaiting + '</b></div><div><span class="label">Lessons, next 7 days</span><b>' + st.lw + '</b></div><div><span class="label">Income this month</span><b>' + money(st.usd) + (st.egp ? " + " + money(st.egp, "EGP") : "") + "</b></div></div>";
+    var sum = '<div class="sum"><div><span class="label">Active students</span><b>' + st.active + '</b></div><div><span class="label">Payment due</span><b>' + st.awaiting + '</b></div><div><span class="label">Lessons, next 7 days</span><b>' + st.lw + '</b></div><div><span class="label">Income this month</span><b>' + money(st.usd) + (st.egp ? " + " + money(st.egp, "EGP") : "") + "</b>" + (st.usd && st.all ? "<small>about " + money(st.all, "EGP") + " in total</small>" : "") + "</div></div>";
     var addBox = UI.add ? addStudentForm() : "";
     var left = '<div class="listcol"><div class="tools"><input type="search" id="q" placeholder="Search name, email or phone" aria-label="Search students" value="' + esc(UI.q) + '">' +
       '<select id="flt" aria-label="Filter by status"><option value="all">All statuses</option>' + opt(Object.keys(STATUS), UI.filter, STATUS) + "</select>" +
@@ -282,8 +380,7 @@
     return '<form class="addbox" data-form="addstudent"><div class="fields">' +
       '<div class="f"><label for="an">Full name</label><input id="an" name="full_name" required></div>' +
       '<div class="f"><label for="ae">Email (their sign-in)</label><input id="ae" name="email" type="email"></div>' +
-      '<div class="f"><label for="ap">WhatsApp</label><input id="ap" name="phone" inputmode="tel" placeholder="+20…"></div>' +
-      '<div class="f"><label for="ac">Country</label><input id="ac" name="country"></div>' +
+      contactFields("a", null) +
       '<div class="f"><label for="apr">Program</label><select id="apr" name="program"><option value="">Not chosen yet</option>' + opt(Object.keys(PRICES), "", mapNames()) + "</select></div>" +
       '<div class="f"><label for="ast">Status</label><select id="ast" name="status">' + opt(Object.keys(STATUS), "lead", STATUS) + "</select></div>" +
       '<div class="f wide"><label for="ag">Goal</label><textarea id="ag" name="goal"></textarea></div></div>' +
@@ -304,13 +401,12 @@
     return '<div class="sec"><h3>Details</h3><form data-form="savestudent" data-id="' + s.id + '"><div class="fields">' +
       '<div class="f"><label for="d1">Full name</label><input id="d1" name="full_name" value="' + esc(s.full_name) + '" required></div>' +
       '<div class="f"><label for="d2">Email (their sign-in)</label><input id="d2" name="email" type="email" value="' + esc(s.email) + '"></div>' +
-      '<div class="f"><label for="d3">WhatsApp</label><input id="d3" name="phone" value="' + esc(s.phone) + '"></div>' +
-      '<div class="f"><label for="d4">Country</label><input id="d4" name="country" value="' + esc(s.country) + '"></div>' +
+      contactFields("d", s) +
       '<div class="f"><label for="d5">Program</label><select id="d5" name="program"><option value="">Not chosen yet</option>' + opt(Object.keys(PRICES), s.program, mapNames()) + "</select></div>" +
       '<div class="f"><label for="d6">Level (CEFR)</label><select id="d6" name="cefr"><option value="">Not tested yet</option>' + opt(CEFR, s.cefr) + "</select></div>" +
       '<div class="f"><label for="d7">Status</label><select id="d7" name="status">' + opt(Object.keys(STATUS), s.status, STATUS) + "</select></div>" +
       '<div class="f wide"><label for="d8">Goal</label><textarea id="d8" name="goal">' + esc(s.goal) + "</textarea></div></div>" +
-      '<div class="acts" style="margin-top:12px"><button class="btn" type="submit">Save details</button></div></form></div>';
+      '<div class="acts" style="margin-top:12px"><button class="btn" type="submit">Save details</button>' + (s.phone ? '<a class="btn sec" href="' + esc(waLink(s.phone)) + '" target="_blank" rel="noopener">Open WhatsApp chat</a>' : "") + "</div></form></div>";
   }
 
   /* ---- packages and payments */
@@ -322,13 +418,12 @@
         '<span class="hint">' + money(p.price_usd) + (Number(p.discount_pct) ? " after " + Number(p.discount_pct) + "% discount (list " + money(p.list_price_usd) + ")" : "") + " · " + used + " of " + p.lessons_total + " lessons used" +
         (p.expires_on ? " · valid until " + esc(p.expires_on) : " · the 10 weeks start at the first lesson") + (p.pause_until ? " · paused until " + esc(p.pause_until) : "") + "</span>" +
         pp.map(function (x) {
-          var open = UI.receipts[x.id];
-          return '<div class="card"><div class="l1"><span><b>' + money(x.amount, x.currency) + "</b> · " + esc(x.method) + " · " + esc(x.paid_on) + '</span><span class="pills"><span class="pill ok">' + esc(x.receipt_no) + '</span><button type="button" class="btn sec sm" data-act="receipt" data-id="' + x.id + '">' + (open ? "Hide receipt" : "Receipt") + "</button></span></div>" +
-            (open ? '<div class="receipt" id="rc-' + x.id + '">' + esc(receiptText(x, s, p)) + '</div><div class="acts"><button type="button" class="btn sm" data-act="copyr" data-id="' + x.id + '">Copy receipt</button><button type="button" class="btn sec sm" data-act="dlr" data-id="' + x.id + '">Download</button></div>' : "") + "</div>";
+          return '<div class="card"><div class="l1"><span><b>' + money(x.amount, x.currency) + "</b>" + (x.currency === "USD" && egpOf(x) ? " <span class=\"hint\">(about " + money(egpOf(x), "EGP") + ")</span>" : "") + " · " + esc(x.method) + " · " + esc(x.paid_on) + '</span><span class="pills"><span class="pill ok">' + esc(x.receipt_no) + '</span><button type="button" class="btn sec sm" data-act="openreceipt" data-id="' + x.id + '">Open receipt</button></span></div></div>';
         }).join("") +
         (paid ? "" : '<form data-form="addpay" data-id="' + p.id + '" class="addbox"><div class="fields">' +
           '<div class="f"><label for="pa' + p.id + '">Amount received</label><input id="pa' + p.id + '" name="amount" type="number" step="0.01" min="0.01" required value="' + rem + '"></div>' +
           '<div class="f"><label for="pc' + p.id + '">Currency</label><select id="pc' + p.id + '" name="currency" data-change="paycur" data-id="' + p.id + '"><option>USD</option><option>EGP</option></select></div>' +
+          '<div class="f" data-rate="1"><label for="px' + p.id + '">EGP per $1 (kept on the record)</label><input id="px' + p.id + '" name="egp_rate" type="number" step="0.0001" min="1" value="' + esc(S.settings ? S.settings.usd_egp_rate : "") + '"></div>' +
           '<div class="f"><label for="pm' + p.id + '">Method</label><select id="pm' + p.id + '" name="method">' + opt(METHODS, "InstaPay") + "</select></div>" +
           '<div class="f"><label for="pr' + p.id + '">Reference</label><input id="pr' + p.id + '" name="reference" placeholder="Transfer ID or last digits"></div>' +
           '<div class="f"><label for="pd' + p.id + '">Date received</label><input id="pd' + p.id + '" name="paid_on" type="date" value="' + todayStr() + '" required></div></div>' +
@@ -354,9 +449,211 @@
       "Terms: " + TERMS].join("\n");
   }
 
+
+  /* ---- designed receipt: on screen, as PDF (print) and as an image */
+  function payContext(id) {
+    var p = byId(S.payments, id); if (!p) return null;
+    return { p: p, s: byId(S.students, p.student_id), pkg: byId(S.packages, p.package_id) };
+  }
+  function prettyDate(d) { try { return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); } catch (e) { return d; } }
+  function balanceNote(p, pkg) {
+    if (!pkg) return "";
+    var f = pkgPaidFraction(pkg, p.created_at);
+    if (f >= 0.999) return "Paid in full";
+    var egp = Math.round((PRICES[pkg.program] || PRICES.general).egp * pkg.levels * (1 - Number(pkg.discount_pct) / 100));
+    var left = (1 - f) * (p.currency === "EGP" ? egp : Number(pkg.price_usd));
+    return "Balance remaining " + money(Math.round(left * 100) / 100, p.currency);
+  }
+  function receiptRows(c) {
+    var rows = [["Received from", c.s ? c.s.full_name : "Student"], ["Program", c.pkg ? pkgLabel(c.pkg) : "-"], ["Date", prettyDate(c.p.paid_on)],
+      ["Method", c.p.method + (c.p.reference ? " · " + c.p.reference : "")]];
+    var bn = balanceNote(c.p, c.pkg); if (bn) rows.push(["Package", bn]);
+    return rows;
+  }
+  function receiptEquiv(p) {
+    if (p.currency !== "USD" || !egpOf(p)) return "";
+    var r = rateOf(p);
+    return "About " + money(egpOf(p), "EGP") + (r ? " at EGP " + (Math.round(r * 100) / 100) + " per $1" : "");
+  }
+  function receiptCard(c) {
+    var p = c.p;
+    return '<article class="report rcpt"><div class="rtop">' + logo() + '<span class="label">Payment receipt</span></div>' +
+      '<div class="rhead"><div><span class="label">Receipt number</span><h2>' + esc(p.receipt_no) + '</h2></div><span class="pill ok">Payment received</span></div>' +
+      "<dl>" + receiptRows(c).map(function (r) { return "<div><dt>" + esc(r[0]) + "</dt><dd>" + esc(r[1]) + "</dd></div>"; }).join("") + "</dl>" +
+      '<div class="amt"><span class="label">Amount received</span><b>' + esc(money(p.amount, p.currency)) + "</b>" + (receiptEquiv(p) ? "<small>" + esc(receiptEquiv(p)) + "</small>" : "") + "</div>" +
+      '<p class="rfoot">Issued by ' + esc(ISSUER) + ".<br>WhatsApp +20 112 022 3509 · " + esc(CONTACT_EMAIL) + '</p><p class="terms">' + esc(TERMS) + "</p></article>";
+  }
+  function viewReceipt(id) {
+    var c = payContext(id), admin = me.role === "admin";
+    if (!c || !c.s) return '<div class="empty" style="margin-top:20px"><b>Receipt not found</b><button type="button" class="btn sec sm" data-act="go" data-v="' + (admin ? "payments" : "me") + '">Back</button></div>';
+    var bar = '<div class="acts noprint" style="margin:18px 0"><button type="button" class="btn sec sm" data-act="' + (admin ? "open" : "go") + '" data-id="' + c.s.id + '" data-v="me">' + (admin ? "Back to " + esc(c.s.full_name) : "Back") + "</button>" +
+      '<button type="button" class="btn sm" data-act="print">Save as PDF</button><button type="button" class="btn sm" data-act="dlpng" data-id="' + id + '">Download image</button><button type="button" class="btn sec sm" data-act="copyr" data-id="' + id + '">Copy as text</button></div>' +
+      '<p class="hint noprint" style="margin:-6px 0 14px">Save as PDF opens the print window. Choose "Save as PDF" as the printer. The image is ready to send on WhatsApp.</p>';
+    return bar + receiptCard(c);
+  }
+  function wrapText(x, text, maxW) {
+    var words = String(text).split(/\s+/), lines = [], line = "";
+    words.forEach(function (w) {
+      var t = line ? line + " " + w : w;
+      if (x.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t;
+    });
+    if (line) lines.push(line);
+    return lines;
+  }
+  function receiptPNG(c) {
+    var svg = logo().replace(/var\(--ink-soft\)/g, "#5B6577").replace(/var\(--ink\)/g, "#16181D").replace("<svg ", '<svg width="618" height="156" ');
+    var img = new Image();
+    var loaded = new Promise(function (ok) { img.onload = ok; img.onerror = ok; });
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    var fonts = (document.fonts && document.fonts.load) ? Promise.all([document.fonts.load("600 40px Montserrat"), document.fonts.load("400 24px 'Source Sans 3'"), document.fonts.load("600 24px 'Source Sans 3'")]).catch(function () { }) : Promise.resolve();
+    return Promise.all([loaded, fonts]).then(function () {
+      var W = 1080, P = 72, p = c.p, INK = "#16181D", SOFT = "#5B6577", LINE = "#D9DCE2", BRAND = "#E63946";
+      var cv = document.createElement("canvas"); cv.width = W; cv.height = 2400;
+      var x = cv.getContext("2d"), y = 0, D = "Montserrat, 'Segoe UI', sans-serif", T = "'Source Sans 3', 'Segoe UI', sans-serif";
+      x.fillStyle = "#fff"; x.fillRect(0, 0, W, 2400);
+      x.fillStyle = BRAND; x.fillRect(0, 0, W, 14);
+      if (img.width) x.drawImage(img, P, 70, 330, 83);
+      x.fillStyle = SOFT; x.textBaseline = "alphabetic"; x.textAlign = "right"; x.font = "600 22px " + D;
+      if ("letterSpacing" in x) x.letterSpacing = "3px";
+      x.fillText("PAYMENT RECEIPT", W - P, 120);
+      if ("letterSpacing" in x) x.letterSpacing = "0px";
+      x.textAlign = "left";
+      x.fillStyle = BRAND; x.fillRect(P, 190, W - 2 * P, 5);
+      y = 270; x.fillStyle = SOFT; x.font = "600 20px " + D; if ("letterSpacing" in x) x.letterSpacing = "3px"; x.fillText("RECEIPT NUMBER", P, y);
+      if ("letterSpacing" in x) x.letterSpacing = "0px";
+      y += 62; x.fillStyle = INK; x.font = "600 58px " + D; x.fillText(p.receipt_no, P, y);
+      /* paid pill */
+      var pill = "PAYMENT RECEIVED"; x.font = "600 20px " + D;
+      var pw = x.measureText(pill).width + 44; x.strokeStyle = "#1B7F5F"; x.lineWidth = 3;
+      x.beginPath(); if (x.roundRect) x.roundRect(W - P - pw, y - 44, pw, 50, 25); else x.rect(W - P - pw, y - 44, pw, 50); x.stroke();
+      x.fillStyle = "#1B7F5F"; x.fillText(pill, W - P - pw + 22, y - 12);
+      y += 50;
+      receiptRows(c).forEach(function (r) {
+        x.fillStyle = LINE; x.fillRect(P, y, W - 2 * P, 2); y += 46;
+        x.fillStyle = SOFT; x.font = "600 22px " + T; x.fillText(r[0], P, y);
+        x.fillStyle = INK; x.font = "600 28px " + T;
+        wrapText(x, r[1], W - 2 * P - 250).forEach(function (ln, i) { x.fillText(ln, P + 250, y + i * 36); y += i ? 36 : 0; });
+        y += 26;
+      });
+      x.fillStyle = LINE; x.fillRect(P, y, W - 2 * P, 2); y += 40;
+      /* amount block */
+      var eq = receiptEquiv(p), bh = eq ? 230 : 190;
+      x.fillStyle = INK; if (x.roundRect) { x.beginPath(); x.roundRect(P, y, W - 2 * P, bh, 22); x.fill(); } else x.fillRect(P, y, W - 2 * P, bh);
+      x.fillStyle = "#9AA5B8"; x.font = "600 20px " + D; if ("letterSpacing" in x) x.letterSpacing = "3px"; x.fillText("AMOUNT RECEIVED", P + 40, y + 56);
+      if ("letterSpacing" in x) x.letterSpacing = "0px";
+      x.fillStyle = "#fff"; x.font = "600 76px " + D; x.fillText(money(p.amount, p.currency), P + 40, y + 140);
+      if (eq) { x.fillStyle = "#9AA5B8"; x.font = "400 26px " + T; x.fillText(eq, P + 40, y + 190); }
+      y += bh + 56;
+      x.fillStyle = SOFT; x.font = "400 24px " + T;
+      ["Issued by " + ISSUER + ".", "WhatsApp +20 112 022 3509 · " + CONTACT_EMAIL].forEach(function (ln) { x.fillText(ln, P, y); y += 34; });
+      y += 14; x.font = "400 19px " + T;
+      wrapText(x, TERMS, W - 2 * P).forEach(function (ln) { x.fillText(ln, P, y); y += 27; });
+      y += 50;
+      var out = document.createElement("canvas"); out.width = W; out.height = y;
+      out.getContext("2d").drawImage(cv, 0, 0);
+      return new Promise(function (ok) { out.toBlob(ok, "image/png"); });
+    });
+  }
+
+  /* ---- weekly schedule: pick the days once, the lessons are built from it */
+  var COUNTED = ["scheduled", "completed", "late_cancel", "no_show"];
+  function initSched(s, pkg) {
+    var has = pkg.schedule && pkg.schedule.length;
+    return {
+      sid: s.id, pkgId: pkg.id,
+      rows: has ? pkg.schedule.map(function (r) { return { dow: Number(r.dow), time: r.time, min: Number(r.min) || 60 }; }) : [{ dow: 1, time: "21:00", min: 60 }, { dow: 4, time: "21:00", min: 60 }],
+      tz: has ? pkg.schedule_tz : (countryTz(s.country) || "Africa/Cairo"), start: addDays(todayStr(), 1)
+    };
+  }
+  function schedFor(s) {
+    var pkgs = S.packages.filter(function (p) { return p.student_id === s.id && (p.status === "pending" || p.status === "active"); });
+    if (!pkgs.length) return null;
+    var st = UI.sched;
+    if (!st || st.sid !== s.id || !byId(pkgs, st.pkgId)) st = UI.sched = initSched(s, pkgs.filter(pkgIsPaid)[0] || pkgs[0]);
+    return { st: st, pkgs: pkgs };
+  }
+  function readSched(form) {
+    var f = new FormData(form), rows = [], i = 0;
+    while (f.has("dow_" + i)) { rows.push({ dow: parseInt(f.get("dow_" + i), 10), time: String(f.get("time_" + i) || ""), min: parseInt(f.get("min_" + i), 10) || 60 }); i++; }
+    return { sid: form.getAttribute("data-id"), pkgId: f.get("pkg") || (UI.sched && UI.sched.pkgId), rows: rows, tz: f.get("tz") || "Africa/Cairo", start: f.get("start") || todayStr() };
+  }
+  function schedCounts(pkg) {
+    var now = new Date(), mine = S.lessons.filter(function (l) { return l.package_id === pkg.id; });
+    var have = mine.filter(function (l) { return COUNTED.indexOf(l.status) >= 0; }).length;
+    var upcoming = mine.filter(function (l) { return l.status === "scheduled" && new Date(l.starts_at) >= now; }).length;
+    return { have: have, upcoming: upcoming };
+  }
+  function schedDates(rows, start, n) {
+    var out = [], d = start, k, sorted = rows.filter(function (r) { return r.time && r.dow >= 0 && r.dow <= 6; }).sort(function (a, b) { return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; });
+    for (k = 0; k < 366 && out.length < n && sorted.length; k++, d = addDays(d, 1)) {
+      var dow = new Date(d + "T00:00:00Z").getUTCDay();
+      sorted.forEach(function (r) { if (out.length < n && r.dow === dow) out.push({ date: d, time: r.time, min: r.min }); });
+    }
+    return out;
+  }
+  function schedPreview(st) {
+    var pkg = byId(S.packages, st.pkgId); if (!pkg) return "";
+    var c = schedCounts(pkg), n = pkg.lessons_total - c.have + c.upcoming;
+    if (!st.rows.length) return '<p class="hint">Add at least one day.</p>';
+    if (n <= 0) return '<p class="hint">All ' + pkg.lessons_total + " lessons of this package are already delivered.</p>";
+    var list = schedDates(st.rows, st.start, n), mine = myTz(), diff = false;
+    if (!list.length) return '<p class="hint">Fill in the day and start time of each row.</p>';
+    var items = list.map(function (l, i) {
+      var ms = zonedToMs(l.date, l.time, st.tz), end = ms + l.min * 60000, a = clock(ms, st.tz), b = clock(ms, mine), same = a === b;
+      if (!same) diff = true;
+      var day = new Date(l.date + "T00:00:00Z").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+      return "<li>" + esc(day) + " · " + esc(a) + "–" + esc(clock(end, st.tz)) + (same ? "" : ' <span class="hint">(' + esc(b) + " your time)</span>") + "</li>";
+    }).join("");
+    var firstD = list[0].date, lastD = list[list.length - 1].date, lim = addDays(firstD, 70);
+    return "<p><b>" + list.length + " lessons</b> in " + esc(tzLabel(st.tz)) + ", from " + esc(firstD) + " to " + esc(lastD) + ". The 10 weeks end on " + esc(lim) + ".</p>" +
+      (lastD > lim ? '<p class="err">The last lesson falls after the 10-week limit. Add another day per week or start earlier.</p>' : "") +
+      (c.upcoming ? '<p class="hint">This replaces the ' + c.upcoming + " upcoming lessons already scheduled.</p>" : "") +
+      '<ol class="prev">' + items + "</ol>" + (diff ? '<p class="hint">Times in brackets are in your own time zone, so you can see them against your day.</p>' : "");
+  }
+  function scheduleSection(s) {
+    var info = schedFor(s);
+    if (!info) return '<div class="sec"><h3>Weekly schedule</h3><p class="hint">Create a package first. Then pick the weekly days here and the lessons are built for you.</p></div>';
+    var st = info.st;
+    var rows = st.rows.map(function (r, i) {
+      return '<div class="srow"><div class="f"><label for="sd' + i + '">Day</label><select id="sd' + i + '" name="dow_' + i + '">' + DOWS.map(function (d) { return '<option value="' + d[0] + '"' + (d[0] === r.dow ? " selected" : "") + ">" + d[1] + "</option>"; }).join("") + "</select></div>" +
+        '<div class="f"><label for="st' + i + '">Starts</label><input id="st' + i + '" name="time_' + i + '" type="time" value="' + esc(r.time) + '" required></div>' +
+        '<div class="f"><label for="sm' + i + '">Minutes</label><input id="sm' + i + '" name="min_' + i + '" type="number" min="15" max="180" step="5" value="' + r.min + '" required></div>' +
+        '<button type="button" class="btn danger sm" data-act="delday" data-i="' + i + '" aria-label="Remove this day">Remove</button></div>';
+    }).join("");
+    var pkgSel = info.pkgs.length > 1 ? '<div class="f"><label for="spk">Package</label><select id="spk" name="pkg" data-change="schedpkg" data-id="' + s.id + '">' + info.pkgs.map(function (p) { return '<option value="' + p.id + '"' + (p.id === st.pkgId ? " selected" : "") + ">" + esc(pkgLabel(p)) + (pkgIsPaid(p) ? " · paid" : " · payment due") + "</option>"; }).join("") + "</select></div>" : "";
+    return '<div class="sec"><h3>Weekly schedule</h3><form data-form="schedule" data-id="' + s.id + '" class="addbox">' + pkgSel +
+      '<div class="srows">' + rows + '</div><div class="acts"><button type="button" class="btn sec sm" data-act="addday">Add another day</button></div>' +
+      '<div class="fields"><div class="f"><label for="stz">These times are in</label><select id="stz" name="tz">' + tzOptions(st.tz) + '</select></div>' +
+      '<div class="f"><label for="sst">First lesson on or after</label><input id="sst" name="start" type="date" value="' + esc(st.start) + '" required></div></div>' +
+      '<div id="schedprev" aria-live="polite">' + schedPreview(st) + '</div><div class="acts"><button class="btn" type="submit">Create the lessons</button></div></form></div>';
+  }
+  function submitSchedule(form, done) {
+    var st = UI.sched = readSched(form), pkg = byId(S.packages, st.pkgId);
+    if (!pkg) { toast("Choose a package.", true); return done(); }
+    var seen = {}, bad = !st.rows.length;
+    st.rows.forEach(function (r) { var k = r.dow + "@" + r.time; if (!r.time || !(r.dow >= 0 && r.dow <= 6) || seen[k]) bad = true; seen[k] = 1; });
+    if (bad) { toast("Check the days: each needs a day and a start time, and none can repeat.", true); return done(); }
+    var c = schedCounts(pkg), n = pkg.lessons_total - c.have + c.upcoming;
+    if (n <= 0) { toast("All lessons of this package are already delivered.", true); return done(); }
+    var rows = st.rows.map(function (r) { return { dow: r.dow, time: r.time, min: r.min }; });
+    var go = function (replace) {
+      return act(sb.from("packages").update({ schedule: rows, schedule_tz: st.tz }).eq("id", pkg.id), null).then(function () {
+        return act(sb.rpc("generate_lessons", { p_package: pkg.id, p_start: st.start, p_replace: replace }), null);
+      }).then(function (made) { toast(made + " lessons scheduled."); return refresh(); });
+    };
+    (c.upcoming ? ask("This package already has " + c.upcoming + " upcoming lessons. Replace them with this schedule?", "Replace them") : Promise.resolve(true)).then(function (ok) {
+      return ok ? go(c.upcoming > 0) : null;
+    }).then(done, done);
+  }
+
   /* ---- lessons */
   function lessonsSection(s, pkgs, les) {
-    var rows = les.slice().sort(function (a, b) { return a.starts_at < b.starts_at ? 1 : -1; }).map(function (l) {
+    var nowIso = new Date().toISOString();
+    var rows = les.slice().sort(function (a, b) {
+      var ua = a.status === "scheduled" && a.starts_at >= nowIso, ub = b.status === "scheduled" && b.starts_at >= nowIso;
+      if (ua !== ub) return ua ? -1 : 1;
+      return ua ? (a.starts_at < b.starts_at ? -1 : 1) : (a.starts_at < b.starts_at ? 1 : -1);
+    }).map(function (l) {
       return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " · " + l.duration_min + ' min</span><select data-change="lstatus" data-id="' + l.id + '" aria-label="Lesson status" style="width:auto">' + opt(Object.keys(LSTATUS), l.status, LSTATUS) + "</select></div>" +
         '<form data-form="savelesson" data-id="' + l.id + '"><div class="fields"><div class="f"><label for="lt' + l.id + '">Topic</label><input id="lt' + l.id + '" name="topic" value="' + esc(l.topic) + '"></div>' +
         '<div class="f"><label for="lm' + l.id + '">Meeting link</label><input id="lm' + l.id + '" name="meeting_url" type="url" value="' + esc(l.meeting_url) + '"></div>' +
@@ -366,8 +663,8 @@
     var start = new Date(); start.setMinutes(0, 0, 0); start.setHours(start.getHours() + 24);
     var opts = '<option value="">No package</option>' + pkgs.map(function (p) { return '<option value="' + p.id + '">' + esc(pkgLabel(p)) + "</option>"; }).join("");
     var ap = activePackage(s.id);
-    return '<div class="sec"><h3>Lessons</h3><div class="cards">' + (rows || '<p class="hint">No lessons scheduled yet.</p>') + "</div>" +
-      '<form data-form="addlesson" data-id="' + s.id + '" class="addbox"><div class="fields">' +
+    return scheduleSection(s) + '<div class="sec"><h3>Lessons</h3><div class="cards">' + (rows || '<p class="hint">No lessons scheduled yet.</p>') + "</div>" +
+      '<p class="label">Add a single lesson (a make-up or an extra)</p><form data-form="addlesson" data-id="' + s.id + '" class="addbox"><div class="fields">' +
       '<div class="f"><label for="lw">Date and time</label><input id="lw" name="when" type="datetime-local" required value="' + localInputValue(start) + '"></div>' +
       '<div class="f"><label for="ld">Minutes</label><input id="ld" name="duration" type="number" min="15" max="180" step="5" value="60" required></div>' +
       '<div class="f"><label for="lp">Package</label><select id="lp" name="package_id">' + opts.replace('value="' + (ap ? ap.id : "") + '"', 'value="' + (ap ? ap.id : "") + '" selected') + "</select></div>" +
@@ -407,24 +704,35 @@
   /* ------------------------------------------------------------ admin: payments ledger */
   function viewPayments() {
     var pays = S.payments.slice().sort(function (a, b) { return a.created_at < b.created_at ? 1 : -1; });
-    var usd = 0, egp = 0; pays.forEach(function (p) { if (p.currency === "EGP") egp += Number(p.amount); else usd += Number(p.amount); });
+    var usd = 0, egp = 0, all = 0; pays.forEach(function (p) { all += egpOf(p); if (p.currency === "EGP") egp += Number(p.amount); else usd += Number(p.amount); });
+    var usdAsEgp = all - egp;
     var rows = pays.map(function (p) {
-      return '<div class="lrow" style="grid-template-columns:110px minmax(0,1fr) auto"><span class="tm">' + esc(p.receipt_no) + '</span><span><a href="#/students/' + p.student_id + '">' + esc(studentName(p.student_id)) + '</a><br><span class="sub">' + esc(p.paid_on) + " · " + esc(p.method) + (p.reference ? " · " + esc(p.reference) : "") + '</span></span><b>' + money(p.amount, p.currency) + "</b></div>";
+      return '<div class="lrow" style="grid-template-columns:110px minmax(0,1fr) auto"><span class="tm">' + esc(p.receipt_no) + '</span><span><a href="#/students/' + p.student_id + '">' + esc(studentName(p.student_id)) + '</a><br><span class="sub">' + esc(p.paid_on) + " · " + esc(p.method) + (p.reference ? " · " + esc(p.reference) : "") + '</span></span><span style="text-align:right"><b>' + money(p.amount, p.currency) + "</b>" +
+        (p.currency === "USD" && egpOf(p) ? '<br><span class="sub">about ' + money(egpOf(p), "EGP") + "</span>" : "") +
+        '<br><button type="button" class="linkbtn sub" data-act="openreceipt" data-id="' + p.id + '">Receipt</button></span></div>';
     }).join("");
-    return '<div class="sum"><div><span class="label">Received in USD</span><b>' + money(usd) + '</b></div><div><span class="label">Received in EGP</span><b>' + money(egp, "EGP") + '</b></div><div><span class="label">Receipts issued</span><b>' + pays.length + "</b></div></div>" +
+    return '<div class="sum"><div><span class="label">Received in USD</span><b>' + money(usd) + "</b>" + (usd ? "<small>about " + money(usdAsEgp, "EGP") + "</small>" : "") + "</div>" +
+      '<div><span class="label">Received in EGP</span><b>' + money(egp, "EGP") + "</b></div>" +
+      '<div><span class="label">Total in EGP</span><b>' + money(all, "EGP") + "</b><small>USD converted at the rate of each payment</small></div>" +
+      '<div><span class="label">Receipts issued</span><b>' + pays.length + "</b></div></div>" +
       (pays.length ? '<div class="acts" style="margin-bottom:12px"><button type="button" class="btn sec sm" data-act="csv">Download as CSV</button></div><div class="list">' + rows + "</div>" : '<div class="empty"><b>No payments yet</b>Record a payment from a student\'s package.</div>');
   }
   function exportCsv() {
-    var head = ["receipt_no", "paid_on", "student", "amount", "currency", "method", "reference"];
+    var head = ["receipt_no", "paid_on", "student", "amount", "currency", "egp_rate", "egp_equivalent", "method", "reference"];
     var lines = [head.join(",")].concat(S.payments.map(function (p) {
-      return [p.receipt_no, p.paid_on, studentName(p.student_id), p.amount, p.currency, p.method, p.reference || ""].map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(",");
+      return [p.receipt_no, p.paid_on, studentName(p.student_id), p.amount, p.currency, p.egp_rate || "", egpOf(p) || "", p.method, p.reference || ""].map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(",");
     }));
     download("clear-payments-" + todayStr() + ".csv", lines.join("\n"), "text/csv");
   }
 
   /* ------------------------------------------------------------ admin: account */
   function viewAccount() {
-    return '<div class="panel" style="margin-top:20px;max-width:520px"><div><h2>Account</h2><p class="hint">Signed in as ' + esc(me.email) + '. Role: ' + esc(me.role) + '.</p></div>' +
+    var cfg = S.settings || {};
+    return '<div class="panel" style="margin-top:20px;max-width:520px"><div><h2>Academy settings</h2><p class="hint">Used when you record payments and build lessons.</p></div>' +
+      '<form data-form="saverate"><div class="fields" style="grid-template-columns:1fr"><div class="f"><label for="sr">USD to EGP rate (EGP for $1)</label><input id="sr" name="usd_egp_rate" type="number" step="0.0001" min="1" required value="' + esc(cfg.usd_egp_rate) + '"><span class="hint">New dollar payments start from this rate, and each payment keeps the rate it was recorded at. Your price list works out at about 50.63.</span></div>' +
+      '<div class="f"><label for="sl">Default lesson link (Zoom or Google Meet)</label><input id="sl" name="default_meeting_url" type="url" placeholder="https://" value="' + esc(cfg.default_meeting_url) + '"><span class="hint">New lessons get this link. Students see a Join button.</span></div></div>' +
+      '<div class="acts" style="margin-top:10px"><button class="btn" type="submit">Save settings</button><button type="button" class="btn sec" data-act="applylink">Use the link for lessons that have none</button></div></form></div>' +
+      '<div class="panel" style="margin-top:20px;max-width:520px"><div><h2>Account</h2><p class="hint">Signed in as ' + esc(me.email) + '. Role: ' + esc(me.role) + '.</p></div>' +
       '<form data-form="setpw"><div class="f"><label for="np">Set a password</label><input id="np" name="password" type="password" minlength="8" autocomplete="new-password" required><span class="hint">At least 8 characters. Then you can sign in with email and password instead of waiting for an email.</span></div><div class="acts" style="margin-top:10px"><button class="btn" type="submit">Save password</button></div></form></div>';
   }
 
@@ -515,9 +823,7 @@
         return '<div class="card"><div class="l1"><span class="t">' + esc(pkgLabel(p)) + '</span><span class="pill ' + (pkgIsPaid(p) ? "ok" : "warn") + '">' + (pkgIsPaid(p) ? "Paid" : "Payment due") + '</span></div><span class="hint">' + pkgUsed(p) + " of " + p.lessons_total + " lessons used" + (p.expires_on ? " · valid until " + esc(p.expires_on) : "") + "</span></div>";
       }).join("") + "</div></div>" : "") +
       (pays.length ? '<div class="sec"><h3>Your receipts</h3><div class="cards">' + pays.map(function (x) {
-        var open = UI.receipts[x.id], pkg = byId(pkgs, x.package_id);
-        return '<div class="card"><div class="l1"><span><b>' + money(x.amount, x.currency) + "</b> · " + esc(x.paid_on) + '</span><span class="pills"><span class="pill ok">' + esc(x.receipt_no) + '</span><button type="button" class="btn sec sm" data-act="receipt" data-id="' + x.id + '">' + (open ? "Hide" : "Show") + "</button></span></div>" +
-          (open ? '<div class="receipt" id="rc-' + x.id + '">' + esc(receiptText(x, s, pkg)) + '</div><div class="acts"><button type="button" class="btn sm" data-act="copyr" data-id="' + x.id + '">Copy</button></div>' : "") + "</div>";
+        return '<div class="card"><div class="l1"><span><b>' + money(x.amount, x.currency) + "</b> · " + esc(x.paid_on) + '</span><span class="pills"><span class="pill ok">' + esc(x.receipt_no) + '</span><button type="button" class="btn sec sm" data-act="openreceipt" data-id="' + x.id + '">Open receipt</button></span></div></div>';
       }).join("") + "</div></div>" : "") + "</div>" +
       (reps.length ? '<div><h3 style="margin-bottom:12px">Your reports</h3><div style="display:grid;gap:16px">' + reps.map(function (r) { return reportHTML(r, s); }).join("") + '</div><div class="acts noprint" style="margin-top:12px"><button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></div>' : "") + "</div>";
   }
@@ -526,18 +832,37 @@
   function formData(form) { var o = {}; new FormData(form).forEach(function (v, k) { o[k] = typeof v === "string" ? v.trim() : v; }); return o; }
   function nul(v) { return v === "" || v == null ? null : v; }
 
+  function liveSchedule(e) {
+    var f = e.target.form;
+    if (!f || f.getAttribute("data-form") !== "schedule" || e.target.getAttribute("data-change") === "schedpkg") return false;
+    UI.sched = readSched(f); var box = $("#schedprev"); if (box) box.innerHTML = schedPreview(UI.sched);
+    return true;
+  }
   function onInput(e) {
-    if (e.target.id === "q") { UI.q = e.target.value; $("#list").innerHTML = studentRows(); }
+    if (e.target.id === "q") { UI.q = e.target.value; $("#list").innerHTML = studentRows(); return; }
+    liveSchedule(e);
   }
   function onChange(e) {
     var t = e.target, ch = t.getAttribute("data-change");
+    if (liveSchedule(e)) return;
+    if (ch === "schedpkg") {
+      var s9 = byId(S.students, t.getAttribute("data-id")), p9 = byId(S.packages, t.value);
+      if (s9 && p9) { UI.sched = initSched(s9, p9); render(); }
+      return;
+    }
     if (t.id === "flt") { UI.filter = t.value; $("#list").innerHTML = studentRows(); return; }
+    if (ch === "country") {
+      var f0 = t.form, c0 = countryByName(t.value);
+      if (c0 && f0.dial && !f0.phone_local.value.trim()) f0.dial.value = c0[1];
+      return;
+    }
     if (ch === "pkgprev") {
       var f = t.form; $("#pkgprev").innerHTML = pkgPreview(f.program.value, parseInt(f.levels.value, 10)); return;
     }
     if (ch === "paycur") {
       var pkg = byId(S.packages, t.getAttribute("data-id"));
       if (pkg) t.form.amount.value = pkgRemaining(pkg, t.value);
+      var rf = $("[data-rate]", t.form); if (rf) rf.hidden = t.value !== "USD";
       return;
     }
     if (ch === "lstatus") {
@@ -568,9 +893,27 @@
     if (a === "addtoggle") { UI.add = !UI.add; return render(); }
     if (a === "print") return window.print();
     if (a === "csv") return exportCsv();
-    if (a === "receipt") { UI.receipts[id] = !UI.receipts[id]; return render(); }
-    if (a === "copyr") { var el = $("#rc-" + id); return copyText(el ? el.textContent : ""); }
-    if (a === "dlr") { var p = byId(S.payments, id), s = p && byId(S.students, p.student_id); if (p && s) download(p.receipt_no + "-" + s.full_name.replace(/[^\w]+/g, "-") + ".txt", receiptText(p, s, byId(S.packages, p.package_id))); return; }
+    if (a === "addday" || a === "delday") {
+      var sf = $('form[data-form="schedule"]'), sy = window.scrollY; if (!sf) return;
+      var st2 = UI.sched = readSched(sf);
+      if (a === "delday") st2.rows.splice(parseInt(b.getAttribute("data-i"), 10), 1);
+      else {
+        var used = st2.rows.map(function (r) { return r.dow; }), nd = DOWS.filter(function (d) { return used.indexOf(d[0]) < 0; })[0];
+        st2.rows.push({ dow: nd ? nd[0] : 1, time: st2.rows.length ? st2.rows[st2.rows.length - 1].time : "21:00", min: st2.rows.length ? st2.rows[st2.rows.length - 1].min : 60 });
+      }
+      render(); window.scrollTo(0, sy); return;
+    }
+    if (a === "applylink") {
+      var url = S.settings && S.settings.default_meeting_url;
+      if (!url) return toast("Save a default lesson link first.", true);
+      return act(sb.from("lessons").update({ meeting_url: url }).eq("status", "scheduled").is("meeting_url", null), "Link added to your upcoming lessons.").then(refresh);
+    }
+    if (a === "openreceipt") { location.hash = "#/receipt/" + id; return; }
+    if (a === "copyr") { var c1 = payContext(id); return copyText(c1 && c1.s ? receiptText(c1.p, c1.s, c1.pkg) : ""); }
+    if (a === "dlpng") {
+      var c2 = payContext(id); if (!c2 || !c2.s) return;
+      return receiptPNG(c2).then(function (blob) { if (!blob) throw new Error("no image"); downloadBlob(c2.p.receipt_no + "-" + c2.s.full_name.replace(/[^\w]+/g, "-") + ".png", blob); }).catch(function () { toast("Could not make the image here. Use Save as PDF instead.", true); });
+    }
     if (a === "viewreport") { UI.draft = null; location.hash = "#/report/" + id; return; }
     if (a === "editreport") { UI.draft = null; location.hash = "#/report/" + id + "/edit"; return; }
     if (a === "newreport") return newReport(id);
@@ -608,10 +951,10 @@
     if (btn) btn.disabled = true;
     var done = function () { if (btn) btn.disabled = false; };
     if (kind === "addstudent") {
-      act(sb.from("students").insert({ full_name: d.full_name, email: nul(d.email), phone: nul(d.phone), country: nul(d.country), program: nul(d.program), status: d.status, goal: nul(d.goal) }).select().single(), "Student added.")
+      act(sb.from("students").insert({ full_name: d.full_name, email: nul(d.email), phone: joinPhone(d.dial, d.phone_local), country: nul(d.country), program: nul(d.program), status: d.status, goal: nul(d.goal) }).select().single(), "Student added.")
         .then(function (r) { UI.add = false; return loadAll().then(function () { location.hash = "#/students/" + r.id; render(); }); }).then(done, done);
     } else if (kind === "savestudent") {
-      act(sb.from("students").update({ full_name: d.full_name, email: nul(d.email), phone: nul(d.phone), country: nul(d.country), program: nul(d.program), cefr: nul(d.cefr), status: d.status, goal: nul(d.goal) }).eq("id", id), "Saved.").then(refresh).then(done, done);
+      act(sb.from("students").update({ full_name: d.full_name, email: nul(d.email), phone: joinPhone(d.dial, d.phone_local), country: nul(d.country), program: nul(d.program), cefr: nul(d.cefr), status: d.status, goal: nul(d.goal) }).eq("id", id), "Saved.").then(refresh).then(done, done);
     } else if (kind === "savenote") {
       act(sb.from("student_notes").upsert({ student_id: id, body: d.body, updated_at: new Date().toISOString() }), "Notes saved.").then(refresh).then(done, done);
     } else if (kind === "addpkg") {
@@ -632,6 +975,10 @@
           return sb.from("packages").update({ starts_on: day, expires_on: addDays(day, 70), status: p.status === "pending" ? "pending" : "active" }).eq("id", p.id);
         }
       }).then(refresh).then(done, done);
+    } else if (kind === "schedule") {
+      submitSchedule(form, done);
+    } else if (kind === "saverate") {
+      act(sb.from("settings").update({ usd_egp_rate: Number(d.usd_egp_rate), default_meeting_url: nul(d.default_meeting_url) }).eq("id", 1), "Saved.").then(refresh).then(done, done);
     } else if (kind === "savelesson") {
       act(sb.from("lessons").update({ topic: nul(d.topic), meeting_url: nul(d.meeting_url), summary: nul(d.summary) }).eq("id", id), "Lesson saved.").then(refresh).then(done, done);
     } else if (kind === "savereport") {
@@ -649,13 +996,13 @@
   function addPayment(pkgId, d) {
     var pkg = byId(S.packages, pkgId), amount = Number(d.amount);
     if (!pkg || !(amount > 0)) { toast("Enter the amount received.", true); return Promise.resolve(); }
-    return act(sb.from("payments").insert({ student_id: pkg.student_id, package_id: pkgId, amount: amount, currency: d.currency, method: d.method, reference: nul(d.reference), paid_on: d.paid_on }).select().single(), null).then(function (pay) {
+    return act(sb.from("payments").insert({ student_id: pkg.student_id, package_id: pkgId, amount: amount, currency: d.currency, method: d.method, reference: nul(d.reference), paid_on: d.paid_on, egp_rate: d.currency === "USD" ? (Number(d.egp_rate) || (S.settings ? Number(S.settings.usd_egp_rate) : null)) : null }).select().single(), null).then(function (pay) {
       return loadAll().then(function () {
         var p2 = byId(S.packages, pkgId), s = byId(S.students, pkg.student_id), jobs = [];
         if (p2 && p2.status === "pending" && pkgIsPaid(p2)) jobs.push(sb.from("packages").update({ status: "active" }).eq("id", pkgId));
         if (s && (s.status === "lead" || s.status === "test") && pkgIsPaid(p2)) jobs.push(sb.from("students").update({ status: "active" }).eq("id", s.id));
         return Promise.all(jobs);
-      }).then(function () { UI.receipts[pay.id] = true; toast("Payment recorded. Receipt " + pay.receipt_no + "."); return refresh(); });
+      }).then(function () { toast("Payment recorded. Receipt " + pay.receipt_no + "."); location.hash = "#/receipt/" + pay.id; return refresh(); });
     });
   }
 
