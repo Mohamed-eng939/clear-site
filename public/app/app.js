@@ -198,7 +198,7 @@
 
   /* ------------------------------------------------------------ state */
   var sb = null, session = null, me = null;
-  var S = { students: [], packages: [], payments: [], lessons: [], reports: [], notes: {}, settings: null, materials: [] };
+  var S = { students: [], packages: [], payments: [], lessons: [], reports: [], notes: {}, settings: null, materials: [], academicReady: false, cur_levels: [], cur_lessons: [], cur_files: [], cur_sources: [], assignments: [] };
   var UI = { tab: "link", filter: "all", q: "", add: false, receipts: {}, draft: null, sent: "", sched: null };
   var root = null;
 
@@ -251,7 +251,7 @@
       S.students = unwrap(r[0]) || []; S.packages = unwrap(r[1]) || []; S.payments = unwrap(r[2]) || [];
       S.lessons = unwrap(r[3]) || []; S.reports = unwrap(r[4]) || [];
       S.notes = {}; (unwrap(r[5]) || []).forEach(function (n) { S.notes[n.student_id] = n.body; });
-    });
+    }).then(loadAcademic);
   }
   function refresh() { return loadAll().then(render); }
   function act(promise, okMsg) {
@@ -328,7 +328,7 @@
   function shell(inner, current) {
     var admin = me.role === "admin";
     var nav = admin
-      ? [["students", "Students"], ["lessons", "Lessons"], ["payments", "Payments"], ["account", "Account"]]
+      ? [["students", "Students"], ["lessons", "Lessons"], ["academic", "Clear Academic"], ["payments", "Payments"], ["account", "Account"]]
       : [["me", "My learning"]];
     return '<header class="top"><div class="who">' + logo() + '<span class="label">' + (admin ? "Admin" : "Student") + "</span></div>" +
       '<div class="right"><span class="hint">' + esc(me.email) + '</span><button type="button" class="iconbtn" data-act="theme" aria-label="Switch to ' + (theme() === "dark" ? "light" : "dark") + ' mode">' + (theme() === "dark" ? "&#9728;" : "&#9790;") + '</button><button type="button" class="btn sec sm" data-act="signout">Sign out</button></div></header>' +
@@ -342,6 +342,7 @@
     if (me.role !== "admin") { root.innerHTML = shell(r.name === "receipt" && r.a ? viewReceipt(r.a) : viewMe(), "me"); return; }
     var html;
     if (r.name === "lessons") html = shell(viewLessons(), "lessons");
+    else if (r.name === "academic") html = shell(viewAcademic(r.a || "plan", r.b), "academic");
     else if (r.name === "payments") html = shell(viewPayments(), "payments");
     else if (r.name === "account") html = shell(viewAccount(), "account");
     else if (r.name === "receipt" && r.a) html = shell(viewReceipt(r.a), "payments");
@@ -823,11 +824,11 @@
     return '<article class="report"><div class="rtop">' + logo() + '<span class="label">' + esc(r.kind === "progress" ? "Progress report" : r.kind === "final" ? "Final report" : "Level report") + "</span></div>" +
       "<div><h2>" + esc(s.full_name) + '</h2><p class="hint">' + esc(r.title || "") + (r.title ? " · " : "") + esc((PRICES[s.program] || {}).name || "") + "</p></div>" +
       (r.cefr ? '<div class="lvl"><div class="badge"><div class="label">Your level</div><div class="code">' + esc(r.cefr) + "</div></div>" + scale + "</div>" : "") +
-      (r.summary ? "<div><h3>Summary</h3><p>" + esc(r.summary) + "</p></div>" : "") +
+      (r.summary ? "<div><h3>" + (r.checkpoint ? "How it is going" : "Summary") + "</h3><p>" + esc(r.summary) + "</p></div>" : "") +
       (r.goals ? "<div><h3>Your goals</h3><p>" + esc(r.goals) + "</p></div>" : "") +
       (skills ? "<div><h3>Skills</h3>" + skills + "</div>" : "") +
       (recs ? "<div><h3>Recommendations</h3><ul>" + recs + "</ul></div>" : "") +
-      (objs ? "<div><h3>Level objectives</h3><ol>" + objs + "</ol></div>" : "") +
+      (objs ? "<div><h3>" + (r.checkpoint ? "What to practise next" : "Level objectives") + "</h3><ol>" + objs + "</ol></div>" : "") +
       (plan ? '<div><h3>Lesson plan</h3><div class="plan">' + plan + "</div></div>" : "") +
       '<p class="rfoot">Assessed by ' + esc(r.assessed_by || "CLEAR Academic Team") + (r.published_at ? " · " + esc(new Date(r.published_at).toLocaleDateString([], { day: "numeric", month: "long", year: "numeric" })) : "") + "</p></article>";
   }
@@ -840,7 +841,18 @@
       (edit ? "" : '<button type="button" class="btn sec sm" data-act="editreport" data-id="' + r.id + '">Edit</button><button type="button" class="btn sm" data-act="print">Print or save as PDF</button>') + "</div>";
     return bar + (edit ? reportEditor(r, s) : reportHTML(r, s));
   }
+  function checkpointEditor(r, s) {
+    return '<form data-form="savereport" data-id="' + r.id + '" class="panel"><div><h2>' + esc(CHECKPOINTS[r.checkpoint]) + " · " + esc(s.full_name) + '</h2><p class="hint">A short update for the student. They see it only after you publish it.</p></div>' +
+      '<input type="hidden" name="kind" value="' + esc(r.kind) + '"><div class="fields">' +
+      '<div class="f"><label for="rti">Title</label><input id="rti" name="title" value="' + esc(r.title) + '"></div>' +
+      '<div class="f"><label for="rc">Level now (optional)</label><select id="rc" name="cefr"><option value="">Not set</option>' + opt(CEFR, r.cefr) + "</select></div>" +
+      '<div class="f"><label for="rb">Written by</label><input id="rb" name="assessed_by" value="' + esc(r.assessed_by || "CLEAR Academic Team") + '"></div>' +
+      '<div class="f wide"><label for="rs">How the lessons are going</label><textarea id="rs" name="summary" style="min-height:140px">' + esc(r.summary) + '</textarea></div>' +
+      '<div class="f wide"><label for="ro">What to practise next (one point per line)</label><textarea id="ro" name="objectives" style="min-height:110px">' + esc((r.objectives || []).join("\n")) + "</textarea></div></div>" +
+      '<div class="acts"><button class="btn sec" type="submit" data-pub="0">' + (r.published ? "Unpublish and save" : "Save draft") + '</button>' + (r.published ? '<button class="btn" type="submit" data-pub="1">Save changes</button>' : '<button class="btn" type="submit" data-pub="1">Save and publish to the student</button>') + '<button type="button" class="btn danger" data-act="delreport" data-id="' + r.id + '">Delete</button></div></form>';
+  }
   function reportEditor(r, s) {
+    if (r.checkpoint) return checkpointEditor(r, s);
     var skills = SKILLS.map(function (name, i) {
       var k = (r.skills || []).filter(function (x) { return x.skill === name; })[0] || {};
       return '<div class="card"><div class="t">' + name + '</div><div class="fields"><div class="f"><label for="sc' + i + '">Can do</label><textarea id="sc' + i + '" name="can_' + i + '">' + esc(k.can_do) + '</textarea></div><div class="f"><label for="sn' + i + '">Next step</label><textarea id="sn' + i + '" name="next_' + i + '">' + esc(k.next_step) + "</textarea></div></div></div>";
@@ -897,6 +909,7 @@
     var next = upcoming[0];
     return '<div style="margin-top:20px;display:grid;gap:22px">' +
       '<div class="sum" style="margin:0"><div><span class="label">Hello</span><b>' + esc(s.full_name.split(" ")[0]) + '</b></div><div><span class="label">Your level</span><b>' + esc(s.cefr || "To be tested") + '</b></div><div><span class="label">Next lesson</span><b style="font-size:17px">' + (next ? esc(fmtDT(next.starts_at)) + "</b><small>Egypt time</small>" + (viewTz() !== EG ? "<small>" + converted(next.starts_at) + "</small>" : "") : "Not scheduled yet</b>") + "</div></div>" +
+      studentHomework(s) +
       '<div class="panel"><div class="sec"><h3>Your lessons</h3><div class="f" style="max-width:360px"><label for="vtz">Show lessons in my time zone</label><select id="vtz" data-change="viewtz">' + tzOptions(viewTz()) + '</select></div><p class="hint">Lessons are set in Egypt time.</p><div class="cards">' + (upcoming.concat(past).length ? upcoming.concat(past).map(function (l) {
         return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " Egypt time · " + l.duration_min + ' min</span><span class="pill' + (l.status === "completed" ? " ok" : "") + '">' + esc(LSTATUS[l.status]) + "</span></div>" + (converted(l.starts_at) ? converted(l.starts_at) : "") + lessonFiles(l) +
           (l.topic ? '<span class="hint">' + esc(l.topic) + "</span>" : "") + (l.summary ? "<p>" + esc(l.summary) + "</p>" : "") +
@@ -911,6 +924,346 @@
         return '<div class="card"><div class="l1"><span><b>' + money(x.amount, x.currency) + "</b> · " + esc(x.paid_on) + '</span><span class="pills"><span class="pill ok">' + esc(x.receipt_no) + '</span><button type="button" class="btn sec sm" data-act="openreceipt" data-id="' + x.id + '">Open receipt</button></span></div></div>';
       }).join("") + "</div></div>" : "") + "</div>" +
       (reps.length ? '<div><h3 style="margin-bottom:12px">Your reports</h3><div style="display:grid;gap:16px">' + reps.map(function (r) { return reportHTML(r, s); }).join("") + '</div><div class="acts noprint" style="margin-top:12px"><button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></div>' : "") + "</div>";
+  }
+
+  /* ------------------------------------------------------------ Clear Academic (teacher section) */
+  var CKINDS = { slides: "Slides", handout: "Handout", worksheet: "Worksheet", homework: "Homework", key: "Answer key", notes: "Teacher notes", audio: "Audio", other: "Other" };
+  var CKIND_TO_MKIND = { slides: "slides", handout: "handout", worksheet: "worksheet", homework: "homework", audio: "recording", other: "other" };
+  var CSTATUS = { outline: "Outline", drafting: "Drafting", ready: "Ready" };
+  var SRC_KINDS = { coursebook: "Coursebook", teachers_book: "Teacher's book", workbook: "Workbook", standard: "Standard", wordlist: "Word list", website: "Website", other: "Other" };
+  var SRC_CHECKED = { opened: "Opened and checked", purchased: "Purchased copy", from_memory: "From memory, not checked" };
+  var CHECKPOINTS = { after_1: "After lesson 1", after_4: "After lesson 4", final: "Final report" };
+  var BLUEPRINT = "0-5 min  Warm-up and homework check (speak first, no slides)\n5-15 min  Present the target language (3-5 slides, examples from the learner's life)\n15-30 min  Controlled, then guided practice\n30-45 min  Speaking task (the main output)\n45-55 min  Feedback on errors (3-5 errors recorded live, learner corrects them)\n55-60 min  Recap: \"I can ...\"; set homework";
+
+  function loadAcademic() {
+    var admin = me && me.role === "admin";
+    var q = function (name, col) {
+      var x = sb.from(name).select("*"); if (col) x = x.order(col, { ascending: true });
+      return Promise.resolve(x).then(function (r) { return r.error ? null : (r.data || []); }, function () { return null; });
+    };
+    return Promise.all([
+      admin ? q("cur_levels", "position") : Promise.resolve([]), admin ? q("cur_lessons", "number") : Promise.resolve([]),
+      admin ? q("cur_files", "created_at") : Promise.resolve([]), admin ? q("cur_sources", "position") : Promise.resolve([]), q("assignments", "created_at")
+    ]).then(function (r) {
+      S.academicReady = !admin || (r[0] !== null && r[1] !== null && r[2] !== null && r[3] !== null);
+      S.cur_levels = r[0] || []; S.cur_lessons = r[1] || []; S.cur_files = r[2] || []; S.cur_sources = r[3] || [];
+      S.assignments = (r[4] || []).slice().sort(function (a, b) { return a.created_at < b.created_at ? 1 : -1; });
+    });
+  }
+  function levelOf(l) { return byId(S.cur_levels, l.level_id) || { code: "", position: 1, name: "" }; }
+  function lessonNo(l) { return (levelOf(l).position - 1) * 8 + l.number; }
+  function curLabel(l) { return levelOf(l).code + " · " + l.number + ". " + l.title; }
+  function curFiles(lid) { return S.cur_files.filter(function (f) { return f.lesson_id === lid; }); }
+  function curOptions(sel) {
+    return '<option value="">No curriculum lesson</option>' + S.cur_levels.map(function (lv) {
+      return '<optgroup label="' + esc(lv.code + " " + lv.name) + '">' + S.cur_lessons.filter(function (l) { return l.level_id === lv.id; }).sort(function (a, b) { return a.number - b.number; }).map(function (l) {
+        return '<option value="' + l.id + '"' + (l.id === sel ? " selected" : "") + ">" + esc(l.number + ". " + l.title) + "</option>";
+      }).join("") + "</optgroup>";
+    }).join("");
+  }
+  function hwDue() { return S.assignments.filter(function (a) { return a.status === "submitted"; }).length; }
+  function checkpointItems() {
+    var out = [];
+    S.students.forEach(function (s) {
+      if (s.status !== "active" && s.status !== "paused") return;
+      var pkg = activePackage(s.id); if (!pkg) return;
+      var used = pkgUsed(pkg);
+      [["after_1", 1], ["after_4", 4], ["final", pkg.lessons_total]].forEach(function (cp) {
+        var rep = S.reports.filter(function (r) { return r.student_id === s.id && r.checkpoint === cp[0] && r.created_at >= pkg.created_at; })[0] || null;
+        out.push({ s: s, cp: cp[0], need: cp[1], used: used, rep: rep, due: !rep && used >= cp[1] });
+      });
+    });
+    return out;
+  }
+  function fbDue() { return checkpointItems().filter(function (x) { return x.due; }).length; }
+
+  function viewAcademic(tab, id) {
+    if (!S.academicReady) {
+      return '<div class="empty" style="margin-top:20px"><b>Clear Academic needs one setup step</b>Run the file <code>supabase/migrations/005_clear_academic.sql</code> once in the Supabase SQL editor, then reload this page.</div>';
+    }
+    if (tab === "lesson" && byId(S.cur_lessons, id)) return acLesson(byId(S.cur_lessons, id));
+    var hw = hwDue(), fb = fbDue();
+    var tabs = [["plan", "Plan"], ["schedule", "Schedule"], ["homework", "Homework" + (hw ? " (" + hw + ")" : "")], ["feedback", "Feedback" + (fb ? " (" + fb + ")" : "")], ["sources", "Sources"]];
+    var cur = tabs.some(function (t) { return t[0] === tab; }) ? tab : "plan";
+    var body = cur === "schedule" ? acSchedule() : cur === "homework" ? acHomework() : cur === "feedback" ? acFeedback() : cur === "sources" ? acSources() : acPlan();
+    return '<div style="margin-top:18px;display:grid;gap:18px"><div class="tabs noprint" role="group" aria-label="Clear Academic">' + tabs.map(function (t) {
+      return '<button type="button" data-act="actab" data-v="' + t[0] + '" aria-pressed="' + (cur === t[0]) + '">' + esc(t[1]) + "</button>";
+    }).join("") + "</div>" + body + "</div>";
+  }
+
+  /* ---- plan */
+  function acPlan() {
+    var total = S.cur_lessons.length, ready = S.cur_lessons.filter(function (l) { return l.status === "ready"; }).length;
+    return '<div class="sum" style="margin:0"><div><span class="label">Program</span><b style="font-size:17px">General English A1</b></div><div><span class="label">Levels</span><b>' + S.cur_levels.length + '</b></div><div><span class="label">Lessons ready</span><b>' + ready + " / " + total + "</b></div></div>" +
+      S.cur_levels.map(function (lv) {
+        var ls = S.cur_lessons.filter(function (l) { return l.level_id === lv.id; }).sort(function (a, b) { return a.number - b.number; });
+        return '<div class="panel"><div><h2>' + esc(lv.code) + " " + esc(lv.name) + '</h2><p class="hint">' + esc(lv.summary || "") + '</p></div><div class="cards">' + ls.map(function (l) {
+          var n = curFiles(l.id).length;
+          return '<div class="card"><div class="l1"><span class="t">' + lessonNo(l) + ". " + esc(l.title) + '</span><span class="pills"><span class="pill ' + (l.status === "ready" ? "ok" : l.status === "drafting" ? "warn" : "") + '">' + esc(CSTATUS[l.status]) + '</span><span class="pill">' + n + (n === 1 ? " file" : " files") + "</span></span></div>" +
+            '<span class="hint">' + esc(l.objective || "") + (l.navigate_ref ? " · Navigate " + esc(l.navigate_ref) : "") + "</span>" +
+            '<div class="acts"><button type="button" class="btn sec sm" data-act="aclesson" data-id="' + l.id + '">Open lesson kit</button></div></div>';
+        }).join("") + "</div></div>";
+      }).join("");
+  }
+
+  /* ---- one lesson: details, files, send */
+  function curFileRow(f) {
+    return '<div class="card"><div class="l1"><span class="t">' + esc(f.title) + '</span><span class="pills"><span class="pill">' + esc(CKINDS[f.kind] || f.kind) + '</span><span class="pill ' + (f.for_student ? "ok" : "warn") + '">' + (f.for_student ? "Student can receive" : "Teacher only") + "</span></span></div>" +
+      '<span class="hint">' + esc(f.file_name) + " · " + esc(fmtSize(f.size_bytes)) + "</span>" +
+      '<div class="acts"><button type="button" class="btn sm" data-act="opencur" data-id="' + f.id + '">Open or download</button><button type="button" class="btn danger sm" data-act="delcur" data-id="' + f.id + '">Delete</button></div></div>';
+  }
+  function acLesson(l) {
+    var lv = levelOf(l), files = curFiles(l.id), sendable = files.filter(function (f) { return f.for_student; });
+    var students = S.students.filter(function (s) { return s.status !== "inactive" && s.status !== "completed"; });
+    var now = new Date().toISOString();
+    var up = S.lessons.filter(function (x) { return x.status === "scheduled" && x.starts_at >= now; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
+    var linked = up.filter(function (x) { return x.cur_lesson_id === l.id; })[0];
+    var fld = function (name, label, val, tall, wide) {
+      return '<div class="f' + (wide === false ? "" : " wide") + '"><label for="c_' + name + '">' + label + '</label><textarea id="c_' + name + '" name="' + name + '"' + (tall ? ' style="min-height:' + tall + 'px"' : "") + ">" + esc(val) + "</textarea></div>";
+    };
+    return '<div class="panel"><div class="acts noprint"><button type="button" class="btn sec sm back" data-act="actab" data-v="plan">Back to plan</button></div>' +
+      '<div><span class="label">' + esc(lv.code + " " + lv.name) + " · lesson " + lessonNo(l) + '</span><h2>' + esc(l.title) + "</h2></div>" +
+      '<form data-form="savecur" data-id="' + l.id + '" class="sec"><h3>Lesson plan</h3><div class="fields">' +
+      '<div class="f wide"><label for="c_title">Title</label><input id="c_title" name="title" value="' + esc(l.title) + '" required></div>' +
+      '<div class="f"><label for="c_status">Status</label><select id="c_status" name="status">' + opt(Object.keys(CSTATUS), l.status, CSTATUS) + "</select></div>" +
+      '<div class="f"><label for="c_nav">Navigate reference (for you)</label><input id="c_nav" name="navigate_ref" value="' + esc(l.navigate_ref) + '"></div>' +
+      fld("objective", "Objective: by the end the learner can ...", l.objective, 70) + fld("grammar", "Grammar", l.grammar, 60, false) + fld("vocabulary", "Vocabulary", l.vocabulary, 60, false) +
+      fld("plan", "Staged plan (60 minutes)", l.plan, 170) +
+      '<div class="acts wide" style="grid-column:1/-1"><button type="button" class="btn sec sm" data-act="curblueprint">Fill in the standard 60-minute plan</button></div>' +
+      fld("homework", "Homework sent to the student", l.homework, 90) + fld("omitted", "Left out or replaced, and why", l.omitted, 70) + fld("culture_note", "Cultural suitability note", l.culture_note, 70) +
+      fld("teacher_notes", "Private teacher notes: key, likely errors, timing", l.teacher_notes, 140) +
+      '</div><div class="acts" style="margin-top:12px"><button class="btn" type="submit">Save lesson</button></div></form>' +
+      '<div class="sec"><h3>Files for this lesson</h3><div class="cards">' + (files.map(curFileRow).join("") || '<p class="hint">No files yet. Upload the slides, handout, homework and your private key here once. You can then send them to any student.</p>') + "</div>" +
+      '<form data-form="addcurfile" data-id="' + l.id + '" class="addbox"><div class="fields">' +
+      '<div class="f wide"><label for="cf">File from your device</label><input id="cf" name="file" type="file" accept="' + FILE_ACCEPT + '" required><span class="hint">Up to 50 MB.</span></div>' +
+      '<div class="f"><label for="ck">Type</label><select id="ck" name="kind">' + opt(Object.keys(CKINDS), "slides", CKINDS) + "</select></div>" +
+      '<div class="f"><label for="ct">Title (optional)</label><input id="ct" name="title" placeholder="Uses the file name"></div>' +
+      '<div class="f"><label for="cs">Who can receive it</label><select id="cs" name="for_student"><option value="1">Student can receive it</option><option value="0">Teacher only (key, notes)</option></select></div></div>' +
+      '<div class="acts"><button class="btn" type="submit">Upload file</button></div></form></div>' +
+      '<div class="sec"><h3>Send to a student</h3>' + (!sendable.length && !l.homework ? '<p class="hint">Upload at least one student file, or write the homework above, then you can send this lesson.</p>' :
+        '<form data-form="sendkit" data-id="' + l.id + '" class="addbox"><div class="fields">' +
+        '<div class="f"><label for="sl">For which lesson</label><select id="sl" name="lesson_id"><option value="">No specific lesson</option>' + up.map(function (x) { return '<option value="' + x.id + '"' + (linked && linked.id === x.id ? " selected" : "") + ">" + esc(studentName(x.student_id) + " · " + fmtDT(x.starts_at)) + "</option>"; }).join("") + "</select></div>" +
+        '<div class="f"><label for="ss">Or choose a student</label><select id="ss" name="student_id"><option value="">Use the lesson above</option>' + students.map(function (s) { return '<option value="' + s.id + '">' + esc(s.full_name) + "</option>"; }).join("") + "</select></div></div>" +
+        (sendable.length ? '<div class="f"><label>Files to send</label>' + sendable.map(function (f) { return '<label style="font-weight:400;display:flex;gap:8px;align-items:center"><input type="checkbox" name="f_' + f.id + '" value="1" checked style="width:auto"> ' + esc(f.title) + ' <span class="hint">(' + esc(CKINDS[f.kind]) + ")</span></label>"; }).join("") + "</div>" : "") +
+        '<div class="f"><label style="font-weight:400;display:flex;gap:8px;align-items:center"><input type="checkbox" name="hw" value="1"' + (l.homework ? " checked" : "") + ' style="width:auto"> Also assign homework</label></div>' +
+        '<div class="fields"><div class="f"><label for="hwt">Homework title</label><input id="hwt" name="hw_title" value="' + esc("Homework: " + l.title) + '"></div><div class="f"><label for="hwd">Due date</label><input id="hwd" name="hw_due" type="date"></div>' +
+        '<div class="f wide"><label for="hwi">Instructions</label><textarea id="hwi" name="hw_text">' + esc(l.homework) + "</textarea></div></div>" +
+        '<div class="acts"><button class="btn" type="submit">Send to the student</button></div><p class="hint">Files a student already has are skipped. Teacher-only files are never sent.</p></form>') + "</div></div>";
+  }
+  function openStored(path, name, mime) {
+    var inline = /^(application\/pdf|image\/|audio\/|video\/)/.test(mime || "");
+    var w = window.open("", "_blank");
+    sb.storage.from("materials").createSignedUrl(path, 300, inline ? undefined : { download: name }).then(function (r) {
+      if (r.error || !r.data) { if (w) w.close(); return toast("Could not open that file. Try again.", true); }
+      if (w) { try { w.opener = null; } catch (e) { /* ignore */ } w.location.href = r.data.signedUrl; } else location.href = r.data.signedUrl;
+    }, function () { if (w) w.close(); toast("Could not open that file. Try again.", true); });
+  }
+  function checkFile(file) {
+    if (!file || !file.size) { toast("Choose a file from your device first.", true); return null; }
+    var ext = (file.name.split(".").pop() || "").toLowerCase(), mime = EXT_MIME[ext];
+    if (!mime) { toast("That file type is not supported. Use PowerPoint, PDF, Word, Excel, an image, audio or mp4.", true); return null; }
+    if (file.size > MAX_FILE) { toast("That file is over 50 MB. Compress it or share a link instead.", true); return null; }
+    return mime;
+  }
+  function uploadCurFile(lid, d, done) {
+    var file = d.file, mime = checkFile(file); if (!mime) return done();
+    var path = "kits/" + lid + "/" + uid() + "-" + file.name.replace(/[^\w.\-]+/g, "-");
+    toast("Uploading " + file.name + "…");
+    var bucket = sb.storage.from("materials");
+    bucket.upload(path, file, { contentType: mime, upsert: false }).then(function (r) {
+      if (r.error) throw new Error(r.error.message);
+      return sb.from("cur_files").insert({ lesson_id: lid, kind: d.kind, title: d.title || file.name.replace(/\.[^.]+$/, ""), for_student: d.for_student !== "0", file_path: path, file_name: file.name, mime: mime, size_bytes: file.size });
+    }).then(function (r) {
+      if (r.error) { bucket.remove([path]); throw new Error(r.error.message); }
+      toast("File uploaded."); return refresh();
+    }).catch(function (e) { toast(e.message || "Upload failed.", true); }).then(done, done);
+  }
+  function sendKit(lid, d, done) {
+    var l = byId(S.cur_lessons, lid), live = d.lesson_id ? byId(S.lessons, d.lesson_id) : null;
+    var sid = live ? live.student_id : d.student_id;
+    if (!l || !sid) { toast("Choose a lesson or a student to send to.", true); return done(); }
+    var bucket = sb.storage.from("materials"), sent = 0, skipped = 0;
+    var picks = curFiles(lid).filter(function (f) { return f.for_student && d["f_" + f.id] === "1"; });
+    var chain = Promise.resolve();
+    if (live) chain = chain.then(function () { return sb.from("lessons").update({ cur_lesson_id: lid, topic: live.topic || l.title }).eq("id", live.id); }).then(function (r) { if (r.error) throw new Error(r.error.message); });
+    picks.forEach(function (f) {
+      chain = chain.then(function () {
+        if (S.materials.some(function (m) { return m.student_id === sid && m.cur_file_id === f.id; })) { skipped++; return null; }
+        var dest = sid + "/" + uid() + "-" + f.file_name.replace(/[^\w.\-]+/g, "-");
+        return bucket.copy(f.file_path, dest).then(function (r) {
+          if (r.error) throw new Error(r.error.message);
+          return sb.from("materials").insert({ student_id: sid, lesson_id: live ? live.id : null, cur_file_id: f.id, title: f.title, kind: CKIND_TO_MKIND[f.kind] || "other", file_path: dest, file_name: f.file_name, mime: f.mime, size_bytes: f.size_bytes });
+        }).then(function (r) { if (r.error) { bucket.remove([dest]); throw new Error(r.error.message); } sent++; });
+      });
+    });
+    var hw = false;
+    if (d.hw === "1" && (d.hw_text || d.hw_title)) {
+      chain = chain.then(function () {
+        return sb.from("assignments").insert({ student_id: sid, lesson_id: live ? live.id : null, cur_lesson_id: lid, title: d.hw_title || ("Homework: " + l.title), instructions: nul(d.hw_text), due_on: nul(d.hw_due) });
+      }).then(function (r) { if (r.error) throw new Error(r.error.message); hw = true; });
+    }
+    chain.then(function () {
+      toast("Sent to " + studentName(sid) + ": " + sent + (sent === 1 ? " file" : " files") + (skipped ? ", " + skipped + " already had" : "") + (hw ? ", homework assigned" : "") + ".");
+      return refresh();
+    }).catch(function (e) { toast(e.message || "Could not send.", true); return refresh(); }).then(done, done);
+  }
+
+  /* ---- schedule */
+  function acSchedule() {
+    var from = new Date(); from.setHours(0, 0, 0, 0);
+    var up = S.lessons.filter(function (l) { return l.status === "scheduled" && new Date(l.starts_at) >= from; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
+    if (!up.length) return '<div class="empty"><b>No upcoming lessons</b>Schedule lessons from a student\'s profile, then link each one to a lesson in the plan here.</div>';
+    var out = "", last = "";
+    up.forEach(function (l) {
+      var k = dayKey(l.starts_at), cl = l.cur_lesson_id ? byId(S.cur_lessons, l.cur_lesson_id) : null;
+      if (k !== last) { out += '<div class="day">' + esc(fmtDay(l.starts_at)) + "</div>"; last = k; }
+      out += '<div class="card" style="margin-bottom:8px"><div class="l1"><span class="t">' + esc(fmtTime(l.starts_at)) + " · " + esc(studentName(l.student_id)) + '</span><span class="pills">' +
+        (cl ? '<span class="pill ' + (cl.status === "ready" ? "ok" : "warn") + '">' + esc(CSTATUS[cl.status]) + "</span><span class=\"pill\">" + curFiles(cl.id).length + " files</span>" : '<span class="pill warn">No plan linked</span>') + "</span></div>" +
+        '<div class="fields"><div class="f"><label for="lc' + l.id + '">Lesson in the plan</label><select id="lc' + l.id + '" data-change="lcur" data-id="' + l.id + '">' + curOptions(l.cur_lesson_id) + "</select></div></div>" +
+        (cl ? '<div class="acts"><button type="button" class="btn sec sm" data-act="aclesson" data-id="' + cl.id + '">Open lesson kit</button></div>' : "") + "</div>";
+    });
+    return out;
+  }
+
+  /* ---- homework */
+  function hwCard(a) {
+    var s = byId(S.students, a.student_id);
+    var sub = a.status === "assigned" ? '<p class="hint">Waiting for ' + esc(s ? s.full_name.split(" ")[0] : "the student") + " to submit.</p>" :
+      (a.sub_text ? '<div class="receipt">' + esc(a.sub_text) + "</div>" : "") + (a.sub_path ? '<div class="acts"><button type="button" class="btn sec sm" data-act="opensub" data-id="' + a.id + '">Open submitted file: ' + esc(a.sub_name) + "</button></div>" : "") +
+      '<form data-form="hwfeedback" data-id="' + a.id + '"><div class="f"><label for="fb' + a.id + '">Your feedback to the student</label><textarea id="fb' + a.id + '" name="feedback" required>' + esc(a.feedback) + '</textarea></div><div class="acts" style="margin-top:8px"><button class="btn sm" type="submit">' + (a.status === "reviewed" ? "Update feedback" : "Send feedback") + "</button></div></form>";
+    return '<div class="card"><div class="l1"><span class="t">' + esc(a.title) + '</span><span class="pills"><span class="pill ' + (a.status === "reviewed" ? "ok" : a.status === "submitted" ? "warn" : "") + '">' + (a.status === "reviewed" ? "Reviewed" : a.status === "submitted" ? "To review" : "Assigned") + "</span>" + (a.due_on ? '<span class="pill">Due ' + esc(a.due_on) + "</span>" : "") + "</span></div>" +
+      '<span class="hint"><a href="#/students/' + a.student_id + '">' + esc(studentName(a.student_id)) + "</a>" + (a.submitted_at ? " · submitted " + esc(a.submitted_at.slice(0, 10)) : "") + "</span>" +
+      (a.instructions ? "<p>" + esc(a.instructions) + "</p>" : "") + sub +
+      '<div class="acts"><button type="button" class="btn danger sm" data-act="delhw" data-id="' + a.id + '">Delete</button></div></div>';
+  }
+  function acHomework() {
+    var by = function (st) { return S.assignments.filter(function (a) { return a.status === st; }); };
+    var sec = function (title, list, empty) { return '<div class="sec"><h3>' + title + '</h3><div class="cards">' + (list.map(hwCard).join("") || '<p class="hint">' + empty + "</p>") + "</div></div>"; };
+    var students = S.students.filter(function (s) { return s.status !== "inactive" && s.status !== "completed"; });
+    return '<div class="panel">' + sec("To review", by("submitted"), "Nothing waiting for your feedback.") + sec("Waiting for the student", by("assigned"), "No open homework.") + sec("Reviewed", by("reviewed").slice(0, 15), "Nothing reviewed yet.") +
+      '<div class="sec"><h3>Assign your own homework</h3><form data-form="newhw" class="addbox"><div class="fields"><div class="f"><label for="nh1">Student</label><select id="nh1" name="student_id" required><option value="">Choose</option>' + students.map(function (s) { return '<option value="' + s.id + '">' + esc(s.full_name) + "</option>"; }).join("") + "</select></div>" +
+      '<div class="f"><label for="nh2">Title</label><input id="nh2" name="title" required></div><div class="f"><label for="nh3">Due date</label><input id="nh3" name="due_on" type="date"></div>' +
+      '<div class="f wide"><label for="nh4">Instructions</label><textarea id="nh4" name="instructions"></textarea></div></div><div class="acts"><button class="btn" type="submit">Assign</button></div></form></div></div>';
+  }
+
+  /* ---- feedback checkpoints */
+  function acFeedback() {
+    var items = checkpointItems();
+    if (!items.length) return '<div class="empty"><b>No active students yet</b>After lessons 1 and 4 and the last lesson of a package, a short report is due here.</div>';
+    var names = {}; items.forEach(function (x) { names[x.s.id] = x.s; });
+    return '<div class="panel"><p class="hint">A short progress report is due after lesson 1, after lesson 4 and after the last lesson. Students see a report only when you publish it.</p>' + Object.keys(names).map(function (sid) {
+      var s = names[sid], mine = items.filter(function (x) { return x.s.id === sid; });
+      return '<div class="sec"><h3>' + esc(s.full_name) + "</h3><div class=\"cards\">" + mine.map(function (x) {
+        var state = x.rep ? (x.rep.published ? '<span class="pill ok">Published</span>' : '<span class="pill warn">Draft</span>') : x.due ? '<span class="pill warn">Due now</span>' : '<span class="pill">Not yet (' + x.used + " of " + x.need + " lessons)</span>";
+        var btn = x.rep ? '<button type="button" class="btn sec sm" data-act="editreport" data-id="' + x.rep.id + '">Open</button>' : x.due ? '<button type="button" class="btn sm" data-act="newcp" data-id="' + x.s.id + '" data-v="' + x.cp + '">Write it</button>' : "";
+        return '<div class="card"><div class="l1"><span class="t">' + esc(CHECKPOINTS[x.cp]) + '</span><span class="pills">' + state + "</span></div>" + (btn ? '<div class="acts">' + btn + "</div>" : "") + "</div>";
+      }).join("") + "</div></div>";
+    }).join("") + "</div>";
+  }
+  function newCheckpoint(sid, cp) {
+    var s = byId(S.students, sid); if (!s) return;
+    var row = { student_id: sid, kind: cp === "final" ? "final" : "progress", checkpoint: cp, title: CHECKPOINTS[cp], cefr: s.cefr || null, goals: "", summary: "", assessed_by: "CLEAR Academic Team", skills: [], recommendations: [], objectives: [], plan: [], published: false };
+    act(sb.from("reports").insert(row).select().single(), "Draft created.").then(function (r) { return loadAll().then(function () { location.hash = "#/report/" + r.id + "/edit"; }); });
+  }
+
+  /* ---- sources */
+  function acSources() {
+    var rows = S.cur_sources.map(function (x) {
+      return '<div class="card"><div class="l1"><span class="t">' + (x.url ? '<a href="' + esc(x.url) + '" target="_blank" rel="noopener">' + esc(x.title) + "</a>" : esc(x.title)) + '</span><span class="pills"><span class="pill">' + esc(SRC_KINDS[x.kind] || x.kind) + '</span><span class="pill ' + (x.checked === "from_memory" ? "warn" : "ok") + '">' + esc(SRC_CHECKED[x.checked]) + (x.checked_on ? " " + esc(x.checked_on) : "") + "</span></span></div>" +
+        '<span class="hint">' + esc(x.publisher || "") + (x.used_for ? " · " + esc(x.used_for) : "") + "</span>" + (x.licence ? '<span class="hint">Licence: ' + esc(x.licence) + "</span>" : "") + (x.notes ? "<p>" + esc(x.notes) + "</p>" : "") +
+        '<div class="acts"><button type="button" class="btn danger sm" data-act="delsrc" data-id="' + x.id + '">Delete</button></div></div>';
+    }).join("");
+    return '<div class="panel"><div class="sec"><h3>Books and sources</h3><div class="cards">' + (rows || '<p class="hint">No sources yet.</p>') + "</div></div>" +
+      '<div class="sec"><h3>Add a source</h3><form data-form="addsrc" class="addbox"><div class="fields"><div class="f wide"><label for="sr1">Title</label><input id="sr1" name="title" required></div>' +
+      '<div class="f"><label for="sr2">Type</label><select id="sr2" name="kind">' + opt(Object.keys(SRC_KINDS), "other", SRC_KINDS) + "</select></div>" +
+      '<div class="f"><label for="sr3">Publisher or owner</label><input id="sr3" name="publisher"></div><div class="f wide"><label for="sr4">Link</label><input id="sr4" name="url" type="url"></div>' +
+      '<div class="f wide"><label for="sr5">What it is used for</label><input id="sr5" name="used_for"></div>' +
+      '<div class="f"><label for="sr6">Checked?</label><select id="sr6" name="checked">' + opt(Object.keys(SRC_CHECKED), "from_memory", SRC_CHECKED) + "</select></div>" +
+      '<div class="f"><label for="sr7">Licence</label><input id="sr7" name="licence"></div><div class="f wide"><label for="sr8">Notes</label><textarea id="sr8" name="notes"></textarea></div></div>' +
+      '<div class="acts"><button class="btn" type="submit">Add source</button></div></form></div></div>';
+  }
+
+  /* ---- student side: homework */
+  function studentHomework(s) {
+    var mine = S.assignments.filter(function (a) { return a.student_id === s.id; });
+    if (!mine.length) return "";
+    return '<div class="panel"><div class="sec"><h3>Your homework</h3><div class="cards">' + mine.map(function (a) {
+      var open = a.status !== "reviewed";
+      return '<div class="card"><div class="l1"><span class="t">' + esc(a.title) + '</span><span class="pills"><span class="pill ' + (a.status === "reviewed" ? "ok" : a.status === "submitted" ? "warn" : "") + '">' + (a.status === "reviewed" ? "Feedback ready" : a.status === "submitted" ? "Sent, waiting for feedback" : "To do") + "</span>" + (a.due_on ? '<span class="pill">Due ' + esc(a.due_on) + "</span>" : "") + "</span></div>" +
+        (a.instructions ? "<p>" + esc(a.instructions) + "</p>" : "") +
+        (a.status === "reviewed" && a.feedback ? '<div class="receipt"><b>Feedback from your teacher</b>\n' + esc(a.feedback) + "</div>" : "") +
+        (a.sub_text && a.status !== "assigned" ? '<span class="hint">Your answer: ' + esc(a.sub_text.length > 140 ? a.sub_text.slice(0, 140) + "…" : a.sub_text) + "</span>" : "") +
+        (open ? '<form data-form="submithw" data-id="' + a.id + '" class="addbox"><div class="f"><label for="h' + a.id + '">' + (a.status === "submitted" ? "Change your answer" : "Your answer") + '</label><textarea id="h' + a.id + '" name="text">' + esc(a.status === "submitted" ? a.sub_text : "") + '</textarea></div>' +
+          '<div class="f"><label for="hf' + a.id + '">Or attach a file or recording (optional)</label><input id="hf' + a.id + '" name="file" type="file" accept="' + FILE_ACCEPT + '"><span class="hint">Up to 50 MB.</span></div><div class="acts"><button class="btn" type="submit">' + (a.status === "submitted" ? "Send again" : "Send to my teacher") + "</button></div></form>" : "") + "</div>";
+    }).join("") + "</div></div></div>";
+  }
+  function submitHomework(id, d, done) {
+    var a = byId(S.assignments, id); if (!a) return done();
+    var file = d.file && d.file.size ? d.file : null, mime = null;
+    if (file) { mime = checkFile(file); if (!mime) return done(); }
+    if (!d.text && !file) { toast("Write your answer or attach a file.", true); return done(); }
+    var bucket = sb.storage.from("materials"), path = null;
+    Promise.resolve().then(function () {
+      if (!file) return null;
+      path = a.student_id + "/submissions/" + uid() + "-" + file.name.replace(/[^\w.\-]+/g, "-");
+      toast("Uploading " + file.name + "…");
+      return bucket.upload(path, file, { contentType: mime, upsert: false }).then(function (r) { if (r.error) throw new Error(r.error.message); });
+    }).then(function () {
+      return sb.rpc("submit_assignment", { p_id: id, p_text: d.text || "", p_path: path, p_name: file ? file.name : null, p_mime: mime, p_size: file ? file.size : null });
+    }).then(function (r) {
+      if (r.error) { if (path) bucket.remove([path]); throw new Error(r.error.message); }
+      toast("Sent to your teacher."); return refresh();
+    }).catch(function (e) { toast(e.message || "Could not send.", true); }).then(done, done);
+  }
+
+  /* ---- Clear Academic: events */
+  function academicClick(a, id, v) {
+    if (a === "actab") { location.hash = "#/academic/" + v; return true; }
+    if (a === "aclesson") { location.hash = "#/academic/lesson/" + id; return true; }
+    if (a === "curblueprint") {
+      var ta = $("#c_plan"); if (!ta) return true;
+      if (ta.value.trim() && ta.value.trim() !== BLUEPRINT) ask("Replace the plan in the box with the standard plan?", "Replace").then(function (ok) { if (ok) ta.value = BLUEPRINT; });
+      else ta.value = BLUEPRINT;
+      return true;
+    }
+    if (a === "opencur") { var f = byId(S.cur_files, id); if (f) openStored(f.file_path, f.file_name, f.mime); return true; }
+    if (a === "delcur") { ask("Delete this file from the lesson kit? Copies already sent to students stay with them.", "Delete file").then(function (ok) {
+      if (!ok) return; var f2 = byId(S.cur_files, id); if (!f2) return;
+      sb.storage.from("materials").remove([f2.file_path]).then(function () { return act(sb.from("cur_files").delete().eq("id", id), "File deleted."); }).then(refresh).catch(function (e) { toast(e.message || "Could not delete.", true); });
+    }); return true; }
+    if (a === "opensub") { var x = byId(S.assignments, id); if (x && x.sub_path) openStored(x.sub_path, x.sub_name, x.sub_mime); return true; }
+    if (a === "delhw") { ask("Delete this homework and any answer the student sent?", "Delete").then(function (ok) {
+      if (!ok) return; var h = byId(S.assignments, id);
+      Promise.resolve(h && h.sub_path ? sb.storage.from("materials").remove([h.sub_path]) : null).then(function () { return act(sb.from("assignments").delete().eq("id", id), "Homework deleted."); }).then(refresh);
+    }); return true; }
+    if (a === "delsrc") { ask("Delete this source from the list?", "Delete").then(function (ok) { if (ok) act(sb.from("cur_sources").delete().eq("id", id), "Source deleted.").then(refresh); }); return true; }
+    if (a === "newcp") { newCheckpoint(id, v); return true; }
+    return false;
+  }
+  function academicChange(t, ch) {
+    if (ch === "lcur") {
+      var id = t.getAttribute("data-id"), l = byId(S.lessons, id), c = t.value ? byId(S.cur_lessons, t.value) : null;
+      var patch = { cur_lesson_id: t.value || null };
+      if (c && l && !l.topic) patch.topic = c.title;
+      act(sb.from("lessons").update(patch).eq("id", id), "Linked.").then(refresh, refresh);
+      return true;
+    }
+    return false;
+  }
+  function academicSubmit(kind, id, d, done) {
+    if (kind === "savecur") {
+      act(sb.from("cur_lessons").update({ title: d.title, status: d.status, navigate_ref: nul(d.navigate_ref), objective: nul(d.objective), grammar: nul(d.grammar), vocabulary: nul(d.vocabulary), plan: nul(d.plan), homework: nul(d.homework), omitted: nul(d.omitted), culture_note: nul(d.culture_note), teacher_notes: nul(d.teacher_notes), updated_at: new Date().toISOString() }).eq("id", id), "Lesson saved.").then(refresh).then(done, done);
+    } else if (kind === "addcurfile") { uploadCurFile(id, d, done);
+    } else if (kind === "sendkit") { sendKit(id, d, done);
+    } else if (kind === "newhw") {
+      act(sb.from("assignments").insert({ student_id: d.student_id, title: d.title, instructions: nul(d.instructions), due_on: nul(d.due_on) }), "Homework assigned.").then(refresh).then(done, done);
+    } else if (kind === "hwfeedback") {
+      act(sb.from("assignments").update({ feedback: d.feedback, status: "reviewed", reviewed_at: new Date().toISOString() }).eq("id", id), "Feedback sent.").then(refresh).then(done, done);
+    } else if (kind === "addsrc") {
+      act(sb.from("cur_sources").insert({ title: d.title, kind: d.kind, publisher: nul(d.publisher), url: nul(d.url), used_for: nul(d.used_for), checked: d.checked, checked_on: d.checked === "from_memory" ? null : todayStr(), licence: nul(d.licence), notes: nul(d.notes), position: S.cur_sources.length + 1 }), "Source added.").then(refresh).then(done, done);
+    } else if (kind === "submithw") { submitHomework(id, d, done);
+    } else return false;
+    return true;
   }
 
   /* ------------------------------------------------------------ events */
@@ -930,6 +1283,7 @@
   function onChange(e) {
     var t = e.target, ch = t.getAttribute("data-change");
     if (liveSchedule(e)) return;
+    if (academicChange(t, ch)) return;
     if (ch === "viewtz") { UI.viewTz = t.value; try { localStorage.setItem("clear-viewtz", t.value); } catch (e) { /* storage blocked */ } return render(); }
     if (ch === "schedpkg") {
       var s9 = byId(S.students, t.getAttribute("data-id")), p9 = byId(S.packages, t.value);
@@ -969,6 +1323,7 @@
   function onClick(e) {
     var b = e.target.closest("[data-act]"); if (!b) return;
     var a = b.getAttribute("data-act"), id = b.getAttribute("data-id"), v = b.getAttribute("data-v");
+    if (academicClick(a, id, v)) return;
     if (a === "tab") { UI.tab = v; UI.sent = ""; return renderAuth(); }
     if (a === "again") { UI.sent = ""; return renderAuth(); }
     if (a === "theme") return toggleTheme();
@@ -1020,7 +1375,8 @@
     });
     if (a === "delstudent") return ask("Delete this student with all packages, payments, lessons and reports? This cannot be undone.", "Delete student").then(function (ok) {
       if (!ok) return;
-      var paths = S.materials.filter(function (m) { return m.student_id === id; }).map(function (m) { return m.file_path; });
+      var paths = S.materials.filter(function (m) { return m.student_id === id; }).map(function (m) { return m.file_path; })
+        .concat(S.assignments.filter(function (x) { return x.student_id === id && x.sub_path; }).map(function (x) { return x.sub_path; }));
       Promise.resolve(paths.length ? sb.storage.from("materials").remove(paths) : null).then(function () { return act(sb.from("students").delete().eq("id", id), "Student deleted."); }).then(function () { location.hash = "#/students"; return refresh(); });
     });
   }
@@ -1043,6 +1399,7 @@
     if (kind === "code") return doCode(d);
     if (btn) btn.disabled = true;
     var done = function () { if (btn) btn.disabled = false; };
+    if (academicSubmit(kind, id, d, done)) return;
     if (kind === "addstudent") {
       act(sb.from("students").insert({ full_name: d.full_name, email: nul(d.email), phone: joinPhone(d.dial, d.phone_local), country: nul(d.country), program: nul(d.program), status: d.status, goal: nul(d.goal) }).select().single(), "Student added.")
         .then(function (r) { UI.add = false; return loadAll().then(function () { location.hash = "#/students/" + r.id; render(); }); }).then(done, done);
