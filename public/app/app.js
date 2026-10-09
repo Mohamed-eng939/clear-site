@@ -328,7 +328,7 @@
   function shell(inner, current) {
     var admin = me.role === "admin";
     var nav = admin
-      ? [["students", "Students"], ["lessons", "Lessons"], ["academic", "Clear Academic"], ["payments", "Payments"], ["account", "Account"]]
+      ? [["today", "Today"], ["students", "Students"], ["lessons", "Lessons"], ["academic", "Clear Academic"], ["payments", "Payments"], ["account", "Account"]]
       : [["me", "My learning"]];
     return '<header class="top"><div class="who">' + logo() + '<span class="label">' + (admin ? "Admin" : "Student") + "</span></div>" +
       '<div class="right"><span class="hint">' + esc(me.email) + '</span><button type="button" class="iconbtn" data-act="theme" aria-label="Switch to ' + (theme() === "dark" ? "light" : "dark") + ' mode">' + (theme() === "dark" ? "&#9728;" : "&#9790;") + '</button><button type="button" class="btn sec sm" data-act="signout">Sign out</button></div></header>' +
@@ -341,7 +341,8 @@
     var r = route();
     if (me.role !== "admin") { root.innerHTML = shell(r.name === "receipt" && r.a ? viewReceipt(r.a) : viewMe(), "me"); return; }
     var html;
-    if (r.name === "lessons") html = shell(viewLessons(), "lessons");
+    if (r.name === "" || r.name === "today") html = shell(viewToday(), "today");
+    else if (r.name === "lessons") html = shell(viewLessons(), "lessons");
     else if (r.name === "academic") html = shell(viewAcademic(r.a || "plan", r.b), "academic");
     else if (r.name === "payments") html = shell(viewPayments(), "payments");
     else if (r.name === "account") html = shell(viewAccount(), "account");
@@ -349,6 +350,38 @@
     else if (r.name === "report" && r.a) html = shell(viewReport(r.a, r.b === "edit"), "students");
     else html = shell(viewStudents(r.name === "students" ? r.a : ""), "students");
     root.innerHTML = html;
+  }
+
+  /* ------------------------------------------------------------ admin: today */
+  function viewToday() {
+    var now = new Date(), horizon = new Date(now.getTime() + 3 * 86400000);
+    var ups = S.lessons.filter(function (l) { var d = new Date(l.starts_at); return l.status === "scheduled" && d >= new Date(now.getTime() - 3600000) && d <= horizon; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
+    var lrows = ups.map(function (l) {
+      var kit = "";
+      if (S.academicReady) {
+        var cl = l.cur_lesson_id ? byId(S.cur_lessons, l.cur_lesson_id) : null;
+        kit = cl ? '<span class="pill ' + (cl.status === "ready" ? "ok" : "warn") + '">Kit: ' + esc(cl.status) + "</span>" : '<span class="pill warn">No kit linked</span>';
+      }
+      return '<div class="lrow"><span class="tm">' + esc(fmtDT(l.starts_at)) + '</span><span><a href="#/students/' + l.student_id + '">' + esc(studentName(l.student_id)) + '</a><br><span class="sub">' + esc(l.topic || "No topic yet") + " · " + l.duration_min + ' min</span></span><span class="pills">' + kit + "</span></div>";
+    }).join("");
+    var hw = S.academicReady ? S.assignments.filter(function (a) { return a.status === "submitted"; }) : [];
+    var hrows = hw.map(function (a) {
+      return '<div class="lrow"><span class="tm">Homework</span><span><a href="#/students/' + a.student_id + '">' + esc(studentName(a.student_id)) + '</a><br><span class="sub">' + esc(a.title || "") + '</span></span><button type="button" class="btn sm" data-act="actab" data-v="homework">Review</button></div>';
+    }).join("");
+    var cps = S.academicReady ? checkpointItems().filter(function (x) { return x.due; }) : [];
+    var crows = cps.map(function (x) {
+      return '<div class="lrow"><span class="tm">Feedback</span><span><a href="#/students/' + x.s.id + '">' + esc(x.s.full_name) + '</a><br><span class="sub">' + esc(CHECKPOINTS[x.cp]) + '</span></span><button type="button" class="btn sm" data-act="newcp" data-id="' + x.s.id + '" data-v="' + x.cp + '">Write it</button></div>';
+    }).join("");
+    var unpaid = S.packages.filter(function (p) { return p.status !== "cancelled" && p.status !== "expired" && !pkgIsPaid(p); });
+    var prows = unpaid.map(function (p) {
+      return '<div class="lrow"><span class="tm">Payment</span><span><a href="#/students/' + p.student_id + '">' + esc(studentName(p.student_id)) + '</a><br><span class="sub">' + esc(pkgLabel(p)) + " · " + money(p.price_usd) + '</span></span><span class="pill warn">Due</span></div>';
+    }).join("");
+    function block(title, rows, none) { return '<div class="sec"><h3>' + title + "</h3>" + (rows ? "<div>" + rows + "</div>" : '<p class="hint">' + none + "</p>") + "</div>"; }
+    return '<div class="panel" style="margin-top:18px">' +
+      block("Lessons in the next 3 days", lrows, "Nothing scheduled.") +
+      block("Homework waiting for your feedback", hrows, "All caught up.") +
+      block("Feedback reports due", crows, "None due.") +
+      block("Payments due", prows, "No unpaid packages.") + "</div>";
   }
 
   /* ------------------------------------------------------------ admin: students */
