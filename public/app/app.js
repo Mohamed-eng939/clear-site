@@ -410,7 +410,7 @@
     var reps = S.reports.filter(function (r) { return r.student_id === s.id; });
     return '<div class="panel"><div class="acts noprint"><button type="button" class="btn sec sm back" data-act="back">Back to students</button></div>' +
       "<div><h2>" + esc(s.full_name) + '</h2><div class="pills" style="margin-top:8px">' + statusPill(s.status) + (s.user_id ? '<span class="pill ok">Has signed in</span>' : '<span class="pill">Not signed in yet</span>') + "</div></div>" +
-      detailsSection(s) + packagesSection(s, pkgs, pays) + lessonsSection(s, pkgs, les) + materialsSection(s, les) + reportsSection(s, reps) + notesSection(s) + dangerSection(s) + "</div>";
+      detailsSection(s) + packagesSection(s, pkgs, pays) + lessonsSection(s, pkgs, les) + materialsSection(s, les) + checkpointStrip(s) + reportsSection(s, reps) + notesSection(s) + dangerSection(s) + "</div>";
   }
   function detailsSection(s) {
     return '<div class="sec"><h3>Details</h3><form data-form="savestudent" data-id="' + s.id + '"><div class="fields">' +
@@ -960,6 +960,17 @@
         return '<option value="' + l.id + '"' + (l.id === sel ? " selected" : "") + ">" + esc(l.number + ". " + l.title) + "</option>";
       }).join("") + "</optgroup>";
     }).join("");
+  }
+  function checkpointStrip(s) {
+    if (!S.academicReady) return "";
+    var items = checkpointItems().filter(function (x) { return x.s.id === s.id; });
+    if (!items.length) return "";
+    var rows = items.map(function (x) {
+      var st = x.rep ? '<span class="pill ok">' + (x.rep.published ? "Sent" : "Draft") + "</span>" : x.due ? '<span class="pill warn">Due now</span>' : '<span class="pill">After lesson ' + x.need + " (" + x.used + " done)</span>";
+      var btn = x.rep ? '<button type="button" class="btn sec sm" data-act="editreport" data-id="' + x.rep.id + '">Open</button>' : x.due ? '<button type="button" class="btn sm" data-act="newcp" data-id="' + s.id + '" data-v="' + x.cp + '">Write it</button>' : "";
+      return '<div class="card"><div class="l1"><span class="t">' + esc(CHECKPOINTS[x.cp]) + '</span><span class="pills">' + st + btn + "</span></div></div>";
+    }).join("");
+    return '<div class="sec"><h3>Feedback checkpoints</h3><div class="cards">' + rows + "</div></div>";
   }
   function hwDue() { return S.assignments.filter(function (a) { return a.status === "submitted"; }).length; }
   function checkpointItems() {
