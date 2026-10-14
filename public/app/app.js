@@ -1027,9 +1027,9 @@
     }
     if (tab === "lesson" && byId(S.cur_lessons, id)) return acLesson(byId(S.cur_lessons, id));
     var hw = hwDue(), fb = fbDue();
-    var tabs = [["plan", "Plan"], ["schedule", "Schedule"], ["homework", "Homework" + (hw ? " (" + hw + ")" : "")], ["feedback", "Feedback" + (fb ? " (" + fb + ")" : "")], ["sources", "Sources"]];
+    var tabs = [["plan", "Plan"], ["schedule", "Schedule"], ["homework", "Homework" + (hw ? " (" + hw + ")" : "")], ["feedback", "Feedback" + (fb ? " (" + fb + ")" : "")], ["sources", "Sources"], ["import", "Import files"]];
     var cur = tabs.some(function (t) { return t[0] === tab; }) ? tab : "plan";
-    var body = cur === "schedule" ? acSchedule() : cur === "homework" ? acHomework() : cur === "feedback" ? acFeedback() : cur === "sources" ? acSources() : acPlan();
+    var body = cur === "schedule" ? acSchedule() : cur === "homework" ? acHomework() : cur === "feedback" ? acFeedback() : cur === "sources" ? acSources() : cur === "import" ? acImport() : acPlan();
     return '<div style="margin-top:18px;display:grid;gap:18px"><div class="tabs noprint" role="group" aria-label="Clear Academic">' + tabs.map(function (t) {
       return '<button type="button" data-act="actab" data-v="' + t[0] + '" aria-pressed="' + (cur === t[0]) + '">' + esc(t[1]) + "</button>";
     }).join("") + "</div>" + body + "</div>";
@@ -1210,6 +1210,92 @@
     act(sb.from("reports").insert(row).select().single(), "Draft created.").then(function (r) { return loadAll().then(function () { location.hash = "#/report/" + r.id + "/edit"; }); });
   }
 
+
+  /* ---- bulk import: pick files, they are matched by file name to a lesson, kind and audience */
+  var T_ = "Titles of audio come from the audioscripts in the Teacher's Notes, not from listening.";
+  var IMPORT_MAP = [
+    { re: /^CLEAR_A1-1_L01_Slides\.pptx$/i, lesson: "A1.1:1", kind: "slides", title: "Lesson 1 class slides (17)", student: true },
+    { re: /^CLEAR_A1-1_L01_Handout\.pdf$/i, lesson: "A1.1:1", kind: "handout", title: "Lesson 1 handout", student: true },
+    { re: /^CLEAR_A1-1_L01_Homework\.pdf$/i, lesson: "A1.1:1", kind: "homework", title: "Lesson 1 homework sheet", student: true },
+    { re: /^CLEAR_A1-1_L01_Teacher_Pack\.pdf$/i, lesson: "A1.1:1", kind: "notes", title: "Lesson 1 Teacher Pack (private)", student: false },
+    { re: /^CLEAR_A1-1_L01_Navigate_pages_TEACHER_ONLY\.pdf$/i, lesson: "A1.1:1", kind: "other", title: "Navigate Coursebook pages 6-7 and 30-31 (screen-share only)", student: false },
+    { re: /^CLEAR_A1_Division_and_Navigate_map\.pdf$/i, lesson: "A1.1:1", kind: "notes", title: "A1 division (3 levels, 24 lessons) and Navigate content map", student: false },
+    { re: /^Track_01_02\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.2: Hello conversation, listen for stress", student: false },
+    { re: /^Track_01_03\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.3: repeat the conversation", student: false },
+    { re: /^Track_01_04\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.4: exercise 4 listening", student: false },
+    { re: /^Track_01_05\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.5: Havva and Paul", student: false },
+    { re: /^Track_01_06\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.6: check and repeat Havva and Paul", student: false },
+    { re: /^Track_01_07\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.7: Sunil and Julie (be)", student: false },
+    { re: /^Track_01_08\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.8: statements or questions", student: false },
+    { re: /^Track_03_12\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.12: family, check answers", student: false },
+    { re: /^Track_03_13\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.13: family words, repeat", student: false },
+    { re: /^Track_03_14\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.14: talking about a family photo", student: false },
+    { re: /^Track_03_15\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.15: my, your, his, her, our, their", student: false },
+    { re: /^Track_03_16\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.16: possessive 's, sound /z/", student: false },
+    { re: /^Track_03_17\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.17: Elsa talks about her family", student: false },
+    { re: /^Track_03_18\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.18: missing words with 's", student: false },
+    { re: /^Track_03_19\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.19: Bruno talks about his friend", student: false },
+    { re: /^Track_03_20\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.20: Mia talks about four people", student: false }
+  ];
+  var IMPORT_LESSON_1 = { title: "Hello! This is my family",
+    objective: "Greet and introduce yourself and your children; exchange basic information (name, age, where you are from, how many children) with a teacher.",
+    grammar: "I'm / my name is; I live in; I've got + number + noun (as a chunk); he's / she's + number; his / her name is; How old...? What's...? Where...? Have you got...?",
+    vocabulary: "hello, name, from, live, numbers 1-11, son, daughter, boy, girl, mum, children, school, teacher, family, baby, parent",
+    navigate_ref: "1.1 (Coursebook pp 6-7); 3.3 family (pp 30-31), reference only",
+    plan: "Warm-up chat > Exposure: Meet Mona (listen or read, true or false) > Test 1 > Clarify have got, age, his / her (Meaning, Pronunciation, Form with CCQs) > Controlled practice > Freer 1 school office role-play, Freer 2 information gap, Freer 3 six sentences with no frame > Delayed error correction > Today I can... and confidence rating. 17 slides with staged speaker notes and timings.",
+    homework: "Write five sentences about your family and send them before Thursday. A voice note is a bonus.",
+    teacher_notes: "Full Teacher Pack has aims, MPF, key, role cards, observation and error-correction sheets, Arabic L1 error table and source checks. Not yet verified against the Oxford 3000 or English Grammar Profile: parent, baby, Ms, mum. " + T_ };
+  function importPlan(files) {
+    return Array.prototype.map.call(files, function (f) {
+      var m = IMPORT_MAP.filter(function (x) { return x.re.test(f.name); })[0] || null;
+      var code = m ? m.lesson.split(":")[0] : "", num = m ? Number(m.lesson.split(":")[1]) : 0;
+      var lv = m ? S.cur_levels.filter(function (x) { return x.code === code; })[0] : null;
+      var les = lv ? S.cur_lessons.filter(function (x) { return x.level_id === lv.id && x.number === num; })[0] : null;
+      var dup = les && S.cur_files.some(function (x) { return x.lesson_id === les.id && x.file_name === f.name; });
+      return { file: f, m: m, les: les, dup: !!dup };
+    });
+  }
+  function acImport() {
+    var done = S.cur_files.length;
+    return '<div class="panel"><div class="sec"><h3>Import files</h3>' +
+      '<p class="hint">Select the Session 1 kit and the audio tracks together (you can pick many files at once). Each file is matched by its name to the right lesson. Audio and the book pages are saved as teacher-only; slides, handout and homework are shareable with the student. Files already in a lesson are skipped. ' + esc(T_) + "</p>" +
+      '<form data-form="importkit" class="addbox"><div class="fields"><div class="f wide"><label for="imf">Files from your device</label><input id="imf" name="files" type="file" multiple accept="' + FILE_ACCEPT + '" data-change="importpick"><span class="hint">Each up to 50 MB. ' + done + ' files stored so far.</span></div></div>' +
+      '<div id="impplan" class="cards"></div>' +
+      '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill1" value="1" checked> Also fill in lesson A1.1 number 1 with the Session 1 plan (title, aims, grammar, words, plan, homework)</label>' +
+      '<div class="acts"><button class="btn" type="submit">Upload the matched files</button></div></form></div></div>';
+  }
+  function importPick(t) {
+    var box = document.getElementById("impplan"); if (!box) return;
+    box.innerHTML = importPlan(t.files).map(function (x) {
+      var st = !x.m ? '<span class="pill warn">Not recognised, will be skipped</span>' : !x.les ? '<span class="pill warn">Lesson not found</span>' : x.dup ? '<span class="pill">Already there</span>' : '<span class="pill ok">' + esc(x.m.lesson.replace(":", " #")) + " · " + (x.m.student ? "student can get it" : "teacher only") + "</span>";
+      return '<div class="card"><div class="l1"><span class="t">' + esc(x.file.name) + '</span><span class="pills">' + st + "</span></div>" + (x.m ? '<span class="hint">' + esc(x.m.title) + "</span>" : "") + "</div>";
+    }).join("");
+  }
+  function importKit(done) {
+    var inp = document.getElementById("imf"), fill = document.querySelector('[data-form="importkit"] [name="fill1"]');
+    var todo = inp ? importPlan(inp.files).filter(function (x) { return x.m && x.les && !x.dup; }) : [];
+    var fillOn = fill && fill.checked, l1 = S.cur_levels.filter(function (x) { return x.code === "A1.1"; })[0];
+    var lesson1 = l1 ? S.cur_lessons.filter(function (x) { return x.level_id === l1.id && x.number === 1; })[0] : null;
+    if (!todo.length && !(fillOn && lesson1)) { toast("Choose files first, or tick the lesson 1 box.", true); return done(); }
+    var bucket = sb.storage.from("materials"), ok = 0, fail = 0, chain = Promise.resolve();
+    todo.forEach(function (x) {
+      chain = chain.then(function () {
+        var mime = checkFile(x.file); if (!mime) { fail++; return null; }
+        var path = "kits/" + x.les.id + "/" + uid() + "-" + x.file.name.replace(/[^\w.\-]+/g, "-");
+        toast("Uploading " + x.file.name + "…");
+        return bucket.upload(path, x.file, { contentType: mime, upsert: false }).then(function (r) {
+          if (r.error) throw new Error(r.error.message);
+          return sb.from("cur_files").insert({ lesson_id: x.les.id, kind: x.m.kind, title: x.m.title, for_student: x.m.student, file_path: path, file_name: x.file.name, mime: mime, size_bytes: x.file.size });
+        }).then(function (r) { if (r.error) { bucket.remove([path]); throw new Error(r.error.message); } ok++; }).catch(function (e) { fail++; toast(x.file.name + ": " + (e.message || "failed"), true); });
+      });
+    });
+    if (fillOn && lesson1) chain = chain.then(function () {
+      var p = Object.assign({}, IMPORT_LESSON_1, { status: "ready", updated_at: new Date().toISOString() });
+      return sb.from("cur_lessons").update(p).eq("id", lesson1.id).then(function (r) { if (r.error) toast(r.error.message, true); });
+    });
+    chain.then(function () { toast(ok + " uploaded" + (fail ? ", " + fail + " failed" : "") + "."); return refresh(); }).then(done, done);
+  }
+
   /* ---- sources */
   function acSources() {
     var rows = S.cur_sources.map(function (x) {
@@ -1285,6 +1371,7 @@
     return false;
   }
   function academicChange(t, ch) {
+    if (ch === "importpick") { importPick(t); return true; }
     if (ch === "lcur") {
       var id = t.getAttribute("data-id"), l = byId(S.lessons, id), c = t.value ? byId(S.cur_lessons, t.value) : null;
       var patch = { cur_lesson_id: t.value || null };
@@ -1305,6 +1392,7 @@
       act(sb.from("assignments").update({ feedback: d.feedback, status: "reviewed", reviewed_at: new Date().toISOString() }).eq("id", id), "Feedback sent.").then(refresh).then(done, done);
     } else if (kind === "addsrc") {
       act(sb.from("cur_sources").insert({ title: d.title, kind: d.kind, publisher: nul(d.publisher), url: nul(d.url), used_for: nul(d.used_for), checked: d.checked, checked_on: d.checked === "from_memory" ? null : todayStr(), licence: nul(d.licence), notes: nul(d.notes), position: S.cur_sources.length + 1 }), "Source added.").then(refresh).then(done, done);
+    } else if (kind === "importkit") { importKit(done);
     } else if (kind === "submithw") { submitHomework(id, d, done);
     } else return false;
     return true;
