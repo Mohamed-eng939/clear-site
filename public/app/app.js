@@ -1285,6 +1285,13 @@
     { re: /^CLEAR_A1-1_L01_Homework\.pdf$/i, lesson: "A1.1:1", kind: "homework", title: "Lesson 1 homework sheet", student: true },
     { re: /^CLEAR_A1-1_L01_Teacher_Pack\.pdf$/i, lesson: "A1.1:1", kind: "notes", title: "Lesson 1 Teacher Pack (private)", student: false },
     { re: /^CLEAR_A1-1_L01_Navigate_pages_TEACHER_ONLY\.pdf$/i, lesson: "A1.1:1", kind: "other", title: "Navigate Coursebook pages 6-7 and 30-31 (screen-share only)", student: false },
+    { re: /^CLEAR_A1-1_L02_Slides\.pptx$/i, lesson: "A1.1:2", kind: "slides", title: "Lesson 2 class slides (18)", student: true },
+    { re: /^CLEAR_A1-1_L02_Slides\.pdf$/i, lesson: "A1.1:2", kind: "slides", title: "Lesson 2 class slides (view online)", student: true },
+    { re: /^CLEAR_A1-1_L02_Handout\.pdf$/i, lesson: "A1.1:2", kind: "handout", title: "Lesson 2 handout", student: true },
+    { re: /^CLEAR_A1-1_L02_Homework\.pdf$/i, lesson: "A1.1:2", kind: "homework", title: "Lesson 2 homework: school form and voice note", student: true },
+    { re: /^CLEAR_A1-1_L02_Teacher_Pack\.pdf$/i, lesson: "A1.1:2", kind: "notes", title: "Lesson 2 Teacher Pack (private)", student: false },
+    { re: /^CLEAR_A1-1_L02_Navigate_pages_TEACHER_ONLY\.pdf$/i, lesson: "A1.1:2", kind: "other", title: "Navigate Coursebook pages 8-11 (screen-share only)", student: false },
+    { re: /^Track_01_(09|1[0-9]|2[0-6])\.mp3$/i, lesson: "A1.1:2", kind: "audio", title: "Navigate audio unit 1.2 / 1.3 (track number as on your CD)", student: false },
     { re: /^CLEAR_A1_Division_and_Navigate_map\.pdf$/i, lesson: "A1.1:1", kind: "notes", title: "A1 division (3 levels, 24 lessons) and Navigate content map", student: false },
     { re: /^Track_01_02\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.2: Hello conversation, listen for stress", student: false },
     { re: /^Track_01_03\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.3: repeat the conversation", student: false },
@@ -1311,6 +1318,14 @@
     plan: "Warm-up chat > Exposure: Meet Mona (listen or read, true or false) > Test 1 > Clarify have got, age, his / her (Meaning, Pronunciation, Form with CCQs) > Controlled practice > Freer 1 school office role-play, Freer 2 information gap, Freer 3 six sentences with no frame > Delayed error correction > Today I can... and confidence rating. 17 slides with staged speaker notes and timings.",
     homework: "Write five sentences about your family and send them before Thursday. A voice note is a bonus.",
     teacher_notes: "Full Teacher Pack has aims, MPF, key, role cards, observation and error-correction sheets, Arabic L1 error table and source checks. Not yet verified against the Oxford 3000 or English Grammar Profile: parent, baby, Ms, mum. " + T_ };
+  var IMPORT_LESSON_2 = { title: "Spell it, say it",
+    objective: "Give your name (spelled), your country and a phone number to a school office, and ask for the same details.",
+    grammar: "What's your name? How do you spell that? Where are you from? What's your phone number? I'm / We're from...; Are you from...? Yes, I am. / No, I'm not.; It's + numbers; double",
+    vocabulary: "alphabet, letter, capital, small, first name, last name, phone number, country, numbers 0-10, oh, double, Egypt, Bahrain, Jordan, India, Pakistan, school, office",
+    navigate_ref: "1.2 Where are you from? (pp 8-9); 1.3 How do you spell that? (pp 10-11), reference only",
+    plan: "Warm-up and lesson 1 retrieval > Exposure: a phone call to a school office > Test 1 (spell, number, country) > Clarify alphabet in seven sound groups, phone numbers (oh, double), Where are you from? > Controlled practice (which letter, write what you hear) > Freer 1 phone call, Freer 2 fill in the form, Freer 3 register a child with no frame > Delayed error correction > Today I can... 18 slides with staged speaker notes and timings.",
+    homework: "Fill in the school form and send a 30-second voice note: spell your first and last name and say a phone number. Send before Monday.",
+    teacher_notes: "Draft built before the lesson 1 report; adjust after it. Not verified against the Oxford 3000 or English Grammar Profile: capital, double, office. Navigate track numbers were read from the book page; check them on your CD." };
   function importPlan(files) {
     return Array.prototype.map.call(files, function (f) {
       var m = IMPORT_MAP.filter(function (x) { return x.re.test(f.name); })[0] || null;
@@ -1328,6 +1343,7 @@
       '<form data-form="importkit" class="addbox"><div class="fields"><div class="f wide"><label for="imf">Files from your device</label><input id="imf" name="files" type="file" multiple accept="' + FILE_ACCEPT + '" data-change="importpick"><span class="hint">Each up to 50 MB. ' + done + ' files stored so far.</span></div></div>' +
       '<div id="impplan" class="cards"></div>' +
       '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill1" value="1" checked> Also fill in lesson A1.1 number 1 with the Session 1 plan (title, aims, grammar, words, plan, homework)</label>' +
+      '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill2" value="1" checked> Also fill in lesson A1.1 number 2 with the Session 2 plan</label>' +
       '<div class="acts"><button class="btn" type="submit">Upload the matched files</button></div></form></div></div>';
   }
   function importPick(t) {
@@ -1342,7 +1358,9 @@
     var todo = inp ? importPlan(inp.files).filter(function (x) { return x.m && x.les && !x.dup; }) : [];
     var fillOn = fill && fill.checked, l1 = S.cur_levels.filter(function (x) { return x.code === "A1.1"; })[0];
     var lesson1 = l1 ? S.cur_lessons.filter(function (x) { return x.level_id === l1.id && x.number === 1; })[0] : null;
-    if (!todo.length && !(fillOn && lesson1)) { toast("Choose files first, or tick the lesson 1 box.", true); return done(); }
+    var fill2 = document.querySelector('[data-form="importkit"] [name="fill2"]'), fill2On = fill2 && fill2.checked;
+    var lesson2 = l1 ? S.cur_lessons.filter(function (x) { return x.level_id === l1.id && x.number === 2; })[0] : null;
+    if (!todo.length && !(fillOn && lesson1) && !(fill2On && lesson2)) { toast("Choose files first, or tick the lesson 1 box.", true); return done(); }
     var bucket = sb.storage.from("materials"), ok = 0, fail = 0, chain = Promise.resolve();
     todo.forEach(function (x) {
       chain = chain.then(function () {
@@ -1358,6 +1376,10 @@
     if (fillOn && lesson1) chain = chain.then(function () {
       var p = Object.assign({}, IMPORT_LESSON_1, { status: "ready", updated_at: new Date().toISOString() });
       return sb.from("cur_lessons").update(p).eq("id", lesson1.id).then(function (r) { if (r.error) toast(r.error.message, true); });
+    });
+    if (fill2On && lesson2) chain = chain.then(function () {
+      var p = Object.assign({}, IMPORT_LESSON_2, { status: "ready", updated_at: new Date().toISOString() });
+      return sb.from("cur_lessons").update(p).eq("id", lesson2.id).then(function (r) { if (r.error) toast(r.error.message, true); });
     });
     chain.then(function () { toast(ok + " uploaded" + (fail ? ", " + fail + " failed" : "") + "."); return refresh(); }).then(done, done);
   }
