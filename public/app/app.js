@@ -1054,7 +1054,7 @@
   function curFileRow(f) {
     return '<div class="card" id="cf' + f.id + '"><div class="l1"><span class="t">' + esc(f.title) + '</span><span class="pills"><span class="pill">' + esc(CKINDS[f.kind] || f.kind) + '</span><span class="pill ' + (f.for_student ? "ok" : "warn") + '">' + (f.for_student ? "Student can receive" : "Teacher only") + "</span></span></div>" +
       '<span class="hint">' + esc(f.file_name) + " · " + esc(fmtSize(f.size_bytes)) + "</span>" +
-      '<div class="acts">' + (/^audio\//.test(f.mime || "") ? '<button type="button" class="btn sm" data-act="playcur" data-id="' + f.id + '">Play here</button>' : "") + '<button type="button" class="btn sm sec" data-act="opencur" data-id="' + f.id + '">Open or download</button><button type="button" class="btn danger sm" data-act="delcur" data-id="' + f.id + '">Delete</button></div></div>';
+      '<div class="acts">' + (/^audio\//.test(f.mime || "") ? '<button type="button" class="btn sm" data-act="playcur" data-id="' + f.id + '">Play here</button>' : "") + (viewableCopy(f) ? '<button type="button" class="btn sm" data-act="viewcur" data-id="' + f.id + '">View</button>' : "") + '<button type="button" class="btn sm sec" data-act="opencur" data-id="' + f.id + '">Open or download</button><button type="button" class="btn danger sm" data-act="delcur" data-id="' + f.id + '">Delete</button></div></div>';
   }
   function acLesson(l) {
     var lv = levelOf(l), files = curFiles(l.id), sendable = files.filter(function (f) { return f.for_student; });
@@ -1094,7 +1094,71 @@
         '<div class="f wide"><label for="hwi">Instructions</label><textarea id="hwi" name="hw_text">' + esc(l.homework) + "</textarea></div></div>" +
         '<div class="acts"><button class="btn" type="submit">Send to the student</button></div><p class="hint">Files a student already has are skipped. Teacher-only files are never sent.</p></form>') + "</div></div>";
   }
+  /* ---- in-app viewer: PDF pages drawn with pdf.js, images shown directly */
+  var pdfLibP = null;
+  function loadPdfLib() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    if (!pdfLibP) pdfLibP = new Promise(function (res, rej) {
+      var s = document.createElement("script"); s.src = "vendor/pdf.min.js";
+      s.onload = function () { window.pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js"; res(window.pdfjsLib); };
+      s.onerror = function () { pdfLibP = null; rej(new Error("Could not load the viewer.")); };
+      document.head.appendChild(s);
+    });
+    return pdfLibP;
+  }
+  function closeViewer() { var v = document.getElementById("dv"); if (v) v.remove(); document.removeEventListener("keydown", viewerKey); }
+  var viewerState = null;
+  function viewerKey(e) {
+    if (!viewerState) return;
+    if (e.key === "Escape") closeViewer();
+    else if (e.key === "ArrowRight" || e.key === "PageDown") viewerGo(1);
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") viewerGo(-1);
+  }
+  function viewerGo(d) { if (!viewerState || !viewerState.doc) return; var n = Math.min(viewerState.doc.numPages, Math.max(1, viewerState.page + d)); if (n !== viewerState.page) { viewerState.page = n; viewerDraw(); } }
+  function viewerDraw() {
+    var st = viewerState, v = document.getElementById("dv"); if (!st || !v) return;
+    var stage = v.querySelector(".stage"), cv = v.querySelector("canvas"), tok = ++st.tok;
+    v.querySelector(".pg").textContent = st.page + " / " + st.doc.numPages;
+    st.doc.getPage(st.page).then(function (pg) {
+      if (tok !== st.tok) return;
+      var vp0 = pg.getViewport({ scale: 1 }), avail = Math.max(280, stage.clientWidth - 28), availH = Math.max(240, stage.clientHeight - 28);
+      var scale = Math.min(avail / vp0.width, st.fit ? availH / vp0.height : 99) * (window.devicePixelRatio || 1);
+      var vp = pg.getViewport({ scale: scale });
+      cv.width = vp.width; cv.height = vp.height; cv.style.width = Math.floor(vp.width / (window.devicePixelRatio || 1)) + "px";
+      pg.render({ canvasContext: cv.getContext("2d"), viewport: vp });
+    });
+  }
+  function openViewer(path, name, mime) {
+    closeViewer();
+    var v = document.createElement("div"); v.id = "dv"; v.className = "dv"; v.setAttribute("role", "dialog"); v.setAttribute("aria-label", "Viewing " + name);
+    v.innerHTML = '<div class="dvbar"><span class="ttl">' + esc(name) + '</span><button type="button" class="btn sec sm" data-v="prev" aria-label="Previous page">&larr;</button><span class="pg"></span><button type="button" class="btn sec sm" data-v="next" aria-label="Next page">&rarr;</button><button type="button" class="btn sec sm" data-v="fit">Fit / width</button><button type="button" class="btn sm" data-v="dl">Download</button><button type="button" class="btn sm" data-v="close">Close</button></div><div class="stage"><div class="msg">Opening…</div></div>';
+    document.body.appendChild(v);
+    document.addEventListener("keydown", viewerKey);
+    var isImg = /^image\//.test(mime || ""), stage = v.querySelector(".stage");
+    function signed(dl) { return sb.storage.from("materials").createSignedUrl(path, 600, dl ? { download: name } : undefined); }
+    v.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-v]"); if (!b) return; var a = b.getAttribute("data-v");
+      if (a === "close") closeViewer(); else if (a === "prev") viewerGo(-1); else if (a === "next") viewerGo(1);
+      else if (a === "fit" && viewerState) { viewerState.fit = !viewerState.fit; viewerDraw(); }
+      else if (a === "dl") signed(true).then(function (r) { if (r.data) location.href = r.data.signedUrl; });
+    });
+    signed(false).then(function (r) {
+      if (r.error || !r.data) throw new Error("Could not open that file. Try again.");
+      if (isImg) { stage.innerHTML = '<img alt="' + esc(name) + '" src="' + r.data.signedUrl + '" style="max-width:100%;height:auto;background:#fff">'; v.querySelector(".pg").textContent = ""; return null; }
+      return loadPdfLib().then(function (lib) { return lib.getDocument({ url: r.data.signedUrl }).promise; }).then(function (doc) {
+        viewerState = { doc: doc, page: 1, fit: true, tok: 0 };
+        stage.innerHTML = "<canvas></canvas>"; viewerDraw();
+        var rs; window.addEventListener("resize", rs = function () { if (!document.getElementById("dv")) return window.removeEventListener("resize", rs); viewerDraw(); });
+      });
+    }).catch(function (e) { stage.innerHTML = '<div class="msg">' + esc(e.message || "Could not open that file.") + " You can still use Download.</div>"; });
+  }
+  function viewableCopy(f) {
+    if (/pdf|image\//.test(f.mime || "")) return f;
+    var base = f.file_name.replace(/\.[^.]+$/, "").toLowerCase();
+    return curFiles(f.lesson_id).filter(function (x) { return x.id !== f.id && /pdf/.test(x.mime || "") && x.file_name.replace(/\.[^.]+$/, "").toLowerCase() === base; })[0] || null;
+  }
   function openStored(path, name, mime) {
+    if (/^(application\/pdf|image\/)/.test(mime || "")) return openViewer(path, name, mime);
     var inline = /^(application\/pdf|image\/|audio\/|video\/)/.test(mime || "");
     var w = window.open("", "_blank");
     sb.storage.from("materials").createSignedUrl(path, 300, inline ? undefined : { download: name }).then(function (r) {
@@ -1215,6 +1279,7 @@
   var T_ = "Titles of audio come from the audioscripts in the Teacher's Notes, not from listening.";
   var IMPORT_MAP = [
     { re: /^CLEAR_A1-1_L01_Slides\.pptx$/i, lesson: "A1.1:1", kind: "slides", title: "Lesson 1 class slides (17)", student: true },
+    { re: /^CLEAR_A1-1_L01_Slides\.pdf$/i, lesson: "A1.1:1", kind: "slides", title: "Lesson 1 class slides (view online)", student: true },
     { re: /^CLEAR_A1-1_L01_Handout\.pdf$/i, lesson: "A1.1:1", kind: "handout", title: "Lesson 1 handout", student: true },
     { re: /^CLEAR_A1-1_L01_Homework\.pdf$/i, lesson: "A1.1:1", kind: "homework", title: "Lesson 1 homework sheet", student: true },
     { re: /^CLEAR_A1-1_L01_Teacher_Pack\.pdf$/i, lesson: "A1.1:1", kind: "notes", title: "Lesson 1 Teacher Pack (private)", student: false },
@@ -1356,6 +1421,7 @@
       else ta.value = BLUEPRINT;
       return true;
     }
+    if (a === "viewcur") { var vf = byId(S.cur_files, id), vc = vf && viewableCopy(vf); if (vc) openViewer(vc.file_path, vc.file_name, vc.mime); return true; }
     if (a === "playcur") {
       var pf = byId(S.cur_files, id), card = document.getElementById("cf" + id); if (!pf || !card) return true;
       var old = card.querySelector("audio"); if (old) { old.pause(); old.remove(); return true; }

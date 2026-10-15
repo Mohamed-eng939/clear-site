@@ -168,3 +168,13 @@ textarea{min-height:76px;resize:vertical}
 
 /* materials */
 .files{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px}
+
+/* document viewer */
+.dv{position:fixed;inset:0;z-index:50;background:#0e1014;display:grid;grid-template-rows:auto minmax(0,1fr);color:#f4f5f7}
+.dv .dvbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;background:#16181d;border-bottom:1px solid #2e323b}
+.dv .ttl{flex:1 1 160px;min-width:0;font:600 14px/20px var(--display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv .pg{font:600 13px/20px var(--text);min-width:64px;text-align:center}
+.dv .btn{min-height:40px}
+.dv .stage{overflow:auto;display:grid;place-items:center;padding:14px}
+.dv canvas{max-width:100%;height:auto;background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.5)}
+.dv .msg{color:#a9b2c3;padding:24px;text-align:center}
