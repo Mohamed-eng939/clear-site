@@ -1052,9 +1052,9 @@
 
   /* ---- one lesson: details, files, send */
   function curFileRow(f) {
-    return '<div class="card"><div class="l1"><span class="t">' + esc(f.title) + '</span><span class="pills"><span class="pill">' + esc(CKINDS[f.kind] || f.kind) + '</span><span class="pill ' + (f.for_student ? "ok" : "warn") + '">' + (f.for_student ? "Student can receive" : "Teacher only") + "</span></span></div>" +
+    return '<div class="card" id="cf' + f.id + '"><div class="l1"><span class="t">' + esc(f.title) + '</span><span class="pills"><span class="pill">' + esc(CKINDS[f.kind] || f.kind) + '</span><span class="pill ' + (f.for_student ? "ok" : "warn") + '">' + (f.for_student ? "Student can receive" : "Teacher only") + "</span></span></div>" +
       '<span class="hint">' + esc(f.file_name) + " · " + esc(fmtSize(f.size_bytes)) + "</span>" +
-      '<div class="acts"><button type="button" class="btn sm" data-act="opencur" data-id="' + f.id + '">Open or download</button><button type="button" class="btn danger sm" data-act="delcur" data-id="' + f.id + '">Delete</button></div></div>';
+      '<div class="acts">' + (/^audio\//.test(f.mime || "") ? '<button type="button" class="btn sm" data-act="playcur" data-id="' + f.id + '">Play here</button>' : "") + '<button type="button" class="btn sm sec" data-act="opencur" data-id="' + f.id + '">Open or download</button><button type="button" class="btn danger sm" data-act="delcur" data-id="' + f.id + '">Delete</button></div></div>';
   }
   function acLesson(l) {
     var lv = levelOf(l), files = curFiles(l.id), sendable = files.filter(function (f) { return f.for_student; });
@@ -1354,6 +1354,15 @@
       var ta = $("#c_plan"); if (!ta) return true;
       if (ta.value.trim() && ta.value.trim() !== BLUEPRINT) ask("Replace the plan in the box with the standard plan?", "Replace").then(function (ok) { if (ok) ta.value = BLUEPRINT; });
       else ta.value = BLUEPRINT;
+      return true;
+    }
+    if (a === "playcur") {
+      var pf = byId(S.cur_files, id), card = document.getElementById("cf" + id); if (!pf || !card) return true;
+      var old = card.querySelector("audio"); if (old) { old.pause(); old.remove(); return true; }
+      sb.storage.from("materials").createSignedUrl(pf.file_path, 3600).then(function (r) {
+        if (r.error || !r.data) return toast("Could not load the audio. Try again.", true);
+        var au = document.createElement("audio"); au.controls = true; au.autoplay = true; au.src = r.data.signedUrl; au.style.width = "100%"; au.style.marginTop = "8px"; card.appendChild(au);
+      });
       return true;
     }
     if (a === "opencur") { var f = byId(S.cur_files, id); if (f) openStored(f.file_path, f.file_name, f.mime); return true; }
