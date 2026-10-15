@@ -956,6 +956,7 @@
       (pays.length ? '<div class="sec"><h3>Your receipts</h3><div class="cards">' + pays.map(function (x) {
         return '<div class="card"><div class="l1"><span><b>' + money(x.amount, x.currency) + "</b> · " + esc(x.paid_on) + '</span><span class="pills"><span class="pill ok">' + esc(x.receipt_no) + '</span><button type="button" class="btn sec sm" data-act="openreceipt" data-id="' + x.id + '">Open receipt</button></span></div></div>';
       }).join("") + "</div></div>" : "") + "</div>" +
+      '<div class="panel" style="max-width:520px"><div class="sec"><h3>Sign-in password</h3><p class="hint">Optional. Set a password so you can sign in with your email and password next time. You can change it here whenever you like.</p><form data-form="setpw"><div class="f"><label for="np">New password</label><input id="np" name="password" type="password" minlength="8" autocomplete="new-password" required><span class="hint">At least 8 characters.</span></div><div class="acts" style="margin-top:10px"><button class="btn" type="submit">Save password</button></div></form></div></div>' +
       (reps.length ? '<div><h3 style="margin-bottom:12px">Your reports</h3><div style="display:grid;gap:16px">' + reps.map(function (r) { return reportHTML(r, s); }).join("") + '</div><div class="acts noprint" style="margin-top:12px"><button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></div>' : "") + "</div>";
   }
 
