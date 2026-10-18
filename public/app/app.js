@@ -1295,6 +1295,17 @@
     { re: /^CLEAR_A1-1_L02_Phone_call_natural\.mp3$/i, lesson: "A1.1:2", kind: "audio", title: "Lesson 2 audio: the phone call (natural speed)", student: true },
     { re: /^CLEAR_A1-1_L02_Phone_call_slow\.mp3$/i, lesson: "A1.1:2", kind: "audio", title: "Lesson 2 audio: the phone call (slow)", student: true },
     { re: /^CLEAR_A1-1_L02_Phone_call_repeat_after_Mona\.mp3$/i, lesson: "A1.1:2", kind: "audio", title: "Lesson 2 audio: repeat after Mona (pauses)", student: true },
+    { re: /^CLEAR_A1-1_L03_Slides\.pptx$/i, lesson: "A1.1:3", kind: "slides", title: "Lesson 3 class slides (20)", student: true },
+    { re: /^CLEAR_A1-1_L03_Slides\.pdf$/i, lesson: "A1.1:3", kind: "slides", title: "Lesson 3 class slides (view online)", student: true },
+    { re: /^CLEAR_A1-1_L03_Handout\.pdf$/i, lesson: "A1.1:3", kind: "handout", title: "Lesson 3 handout", student: true },
+    { re: /^CLEAR_A1-1_L03_Homework\.pdf$/i, lesson: "A1.1:3", kind: "homework", title: "Lesson 3 homework: your child's bag", student: true },
+    { re: /^CLEAR_A1-1_L03_Teacher_Pack\.pdf$/i, lesson: "A1.1:3", kind: "notes", title: "Lesson 3 Teacher Pack (private)", student: false },
+    { re: /^CLEAR_A1-1_L03_Navigate_pages_TEACHER_ONLY\.pdf$/i, lesson: "A1.1:3", kind: "other", title: "Navigate Coursebook pages 16-17 (screen-share only)", student: false },
+    { re: /^CLEAR_A1-1_L03_School_list\.mp3$/i, lesson: "A1.1:3", kind: "audio", title: "Lesson 3 audio: the school list", student: true },
+    { re: /^CLEAR_A1-1_L03_Shop_dialogue_natural\.mp3$/i, lesson: "A1.1:3", kind: "audio", title: "Lesson 3 audio: the school shop (natural)", student: true },
+    { re: /^CLEAR_A1-1_L03_Shop_dialogue_slow\.mp3$/i, lesson: "A1.1:3", kind: "audio", title: "Lesson 3 audio: the school shop (slow)", student: true },
+    { re: /^CLEAR_A1-1_L03_Numbers_listening\.mp3$/i, lesson: "A1.1:3", kind: "audio", title: "Lesson 3 audio: listen and write the numbers", student: true },
+    { re: /^Track_02_0[1-9]\.mp3$/i, lesson: "A1.1:3", kind: "audio", title: "Navigate audio unit 2.1 (track number as on your CD)", student: false },
     { re: /^CLEAR_A1_Division_and_Navigate_map\.pdf$/i, lesson: "A1.1:1", kind: "notes", title: "A1 division (3 levels, 24 lessons) and Navigate content map", student: false },
     { re: /^Track_01_02\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.2: Hello conversation, listen for stress", student: false },
     { re: /^Track_01_03\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.3: repeat the conversation", student: false },
@@ -1329,6 +1340,14 @@
     plan: "Warm-up and lesson 1 retrieval > Exposure: a phone call to a school office > Test 1 (spell, number, country) > Clarify alphabet in seven sound groups, phone numbers (oh, double), Where are you from? > Controlled practice (which letter, write what you hear) > Freer 1 phone call, Freer 2 fill in the form, Freer 3 register a child with no frame > Delayed error correction > Today I can... 18 slides with staged speaker notes and timings.",
     homework: "Fill in the school form and send a 30-second voice note: spell your first and last name and say a phone number. Send before Monday.",
     teacher_notes: "Draft built before the lesson 1 report; adjust after it. Not verified against the Oxford 3000 or English Grammar Profile: capital, double, office. Navigate track numbers were read from the book page; check them on your CD." };
+  var IMPORT_LESSON_3 = { title: "In the school bag",
+    objective: "Name school things, ask what things are, and ask the price in a shop.",
+    grammar: "a / an; plural -s (/s/ /z/ /iz/); this / that / these / those; What's...? What are...? Who's...?; It's / They're; numbers 11-100; How much is / are...?",
+    vocabulary: "school bag, book, notebook, pen, pencil, ruler, calculator, lunch box, apple, umbrella, laptop, tablet, numbers 11-100, dinar",
+    navigate_ref: "2.1 What's this in English? (pp 16-17), reference only",
+    plan: "Warm-up (homework check 3 min) > Exposure: a note from school > Test 1: name 8 school things > Clarify: 12 words and a/an, plural -s sounds; this/that/these/those; numbers 11-100 (-teen / -ty); How much is/are...? > Controlled practice: ask and answer, listen and write numbers > Freer 1 school shop, Freer 2 price list information gap, Freer 3 real objects, five sentences > Delayed error correction > Today I can... 20 slides with timings.",
+    homework: "Photo of your child's bag things with 10 labels; a 30-second voice note (this/these/that/those); bonus: say five prices.",
+    teacher_notes: "Built after feedback that lesson 2 added too little: at least 80% new language, value table in the Teacher Pack. Not verified against Oxford 3000 / EGP: calculator, lunch box, ruler, school bag, dinar. Audio is synthetic (Kokoro, Apache 2.0)." };
   function importPlan(files) {
     return Array.prototype.map.call(files, function (f) {
       var m = IMPORT_MAP.filter(function (x) { return x.re.test(f.name); })[0] || null;
@@ -1347,6 +1366,7 @@
       '<div id="impplan" class="cards"></div>' +
       '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill1" value="1" checked> Also fill in lesson A1.1 number 1 with the Session 1 plan (title, aims, grammar, words, plan, homework)</label>' +
       '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill2" value="1" checked> Also fill in lesson A1.1 number 2 with the Session 2 plan</label>' +
+      '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill3" value="1" checked> Also fill in lesson A1.1 number 3 with the Session 3 plan</label>' +
       '<div class="acts"><button class="btn" type="submit">Upload the matched files</button></div></form></div></div>';
   }
   function importPick(t) {
@@ -1363,7 +1383,9 @@
     var lesson1 = l1 ? S.cur_lessons.filter(function (x) { return x.level_id === l1.id && x.number === 1; })[0] : null;
     var fill2 = document.querySelector('[data-form="importkit"] [name="fill2"]'), fill2On = fill2 && fill2.checked;
     var lesson2 = l1 ? S.cur_lessons.filter(function (x) { return x.level_id === l1.id && x.number === 2; })[0] : null;
-    if (!todo.length && !(fillOn && lesson1) && !(fill2On && lesson2)) { toast("Choose files first, or tick the lesson 1 box.", true); return done(); }
+    var fill3 = document.querySelector('[data-form="importkit"] [name="fill3"]'), fill3On = fill3 && fill3.checked;
+    var lesson3 = l1 ? S.cur_lessons.filter(function (x) { return x.level_id === l1.id && x.number === 3; })[0] : null;
+    if (!todo.length && !(fillOn && lesson1) && !(fill2On && lesson2) && !(fill3On && lesson3)) { toast("Choose files first, or tick the lesson 1 box.", true); return done(); }
     var bucket = sb.storage.from("materials"), ok = 0, fail = 0, chain = Promise.resolve();
     todo.forEach(function (x) {
       chain = chain.then(function () {
@@ -1383,6 +1405,10 @@
     if (fill2On && lesson2) chain = chain.then(function () {
       var p = Object.assign({}, IMPORT_LESSON_2, { status: "ready", updated_at: new Date().toISOString() });
       return sb.from("cur_lessons").update(p).eq("id", lesson2.id).then(function (r) { if (r.error) toast(r.error.message, true); });
+    });
+    if (fill3On && lesson3) chain = chain.then(function () {
+      var p = Object.assign({}, IMPORT_LESSON_3, { status: "ready", updated_at: new Date().toISOString() });
+      return sb.from("cur_lessons").update(p).eq("id", lesson3.id).then(function (r) { if (r.error) toast(r.error.message, true); });
     });
     chain.then(function () { toast(ok + " uploaded" + (fail ? ", " + fail + " failed" : "") + "."); return refresh(); }).then(done, done);
   }
