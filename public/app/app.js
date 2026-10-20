@@ -1306,6 +1306,16 @@
     { re: /^CLEAR_A1-1_L03_Shop_dialogue_slow\.mp3$/i, lesson: "A1.1:3", kind: "audio", title: "Lesson 3 audio: the school shop (slow)", student: true },
     { re: /^CLEAR_A1-1_L03_Numbers_listening\.mp3$/i, lesson: "A1.1:3", kind: "audio", title: "Lesson 3 audio: listen and write the numbers", student: true },
     { re: /^Track_02_0[1-9]\.mp3$/i, lesson: "A1.1:3", kind: "audio", title: "Navigate audio unit 2.1 (track number as on your CD)", student: false },
+    { re: /^CLEAR_A1-1_L04_Slides\.pptx$/i, lesson: "A1.1:4", kind: "slides", title: "Lesson 4 class slides (21)", student: true },
+    { re: /^CLEAR_A1-1_L04_Slides\.pdf$/i, lesson: "A1.1:4", kind: "slides", title: "Lesson 4 class slides (view online)", student: true },
+    { re: /^CLEAR_A1-1_L04_Handout\.pdf$/i, lesson: "A1.1:4", kind: "handout", title: "Lesson 4 handout", student: true },
+    { re: /^CLEAR_A1-1_L04_Homework\.pdf$/i, lesson: "A1.1:4", kind: "homework", title: "Lesson 4 homework: people and a message to school", student: true },
+    { re: /^CLEAR_A1-1_L04_Teacher_Pack\.pdf$/i, lesson: "A1.1:4", kind: "notes", title: "Lesson 4 Teacher Pack (private)", student: false },
+    { re: /^CLEAR_A1-1_L04_Navigate_pages_TEACHER_ONLY\.pdf$/i, lesson: "A1.1:4", kind: "other", title: "Navigate Coursebook pages 18-21 (screen-share only)", student: false },
+    { re: /^CLEAR_A1-1_L04_School_tour\.mp3$/i, lesson: "A1.1:4", kind: "audio", title: "Lesson 4 audio: the school tour", student: true },
+    { re: /^CLEAR_A1-1_L04_Phone_call_natural\.mp3$/i, lesson: "A1.1:4", kind: "audio", title: "Lesson 4 audio: phone call to school (natural)", student: true },
+    { re: /^CLEAR_A1-1_L04_Phone_call_slow\.mp3$/i, lesson: "A1.1:4", kind: "audio", title: "Lesson 4 audio: phone call to school (slow)", student: true },
+    { re: /^Track_02_1[3-9]\.mp3$/i, lesson: "A1.1:4", kind: "audio", title: "Navigate audio units 2.2-2.3 (track number as on your CD)", student: false },
     { re: /^CLEAR_A1_Division_and_Navigate_map\.pdf$/i, lesson: "A1.1:1", kind: "notes", title: "A1 division (3 levels, 24 lessons) and Navigate content map", student: false },
     { re: /^Track_01_02\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.2: Hello conversation, listen for stress", student: false },
     { re: /^Track_01_03\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.3: repeat the conversation", student: false },
@@ -1348,6 +1358,14 @@
     plan: "Warm-up (homework check 3 min) > Exposure: a note from school > Test 1: name 8 school things > Clarify: 12 words and a/an, plural -s sounds; this/that/these/those; numbers 11-100 (-teen / -ty); How much is/are...? > Controlled practice: ask and answer, listen and write numbers > Freer 1 school shop, Freer 2 price list information gap, Freer 3 real objects, five sentences > Delayed error correction > Today I can... 20 slides with timings.",
     homework: "Photo of your child's bag things with 10 labels; a 30-second voice note (this/these/that/those); bonus: say five prices.",
     teacher_notes: "Built after feedback that lesson 2 added too little: at least 80% new language, value table in the Teacher Pack. Not verified against Oxford 3000 / EGP: calculator, lunch box, ruler, school bag, dinar. Audio is synthetic (Kokoro, Apache 2.0)." };
+  var IMPORT_LESSON_4 = { title: "Who's who?",
+    objective: "Talk about people's jobs and countries, introduce people, and phone the school to leave a message.",
+    grammar: "he / she / they + is / are; isn't / aren't; Is / Are...? and short answers; me, you, him, her, us, them; This is... These are...; Can I speak to...? Can I take a message?",
+    vocabulary: "teacher, headteacher, doctor, nurse, engineer, accountant, journalist, bus driver, taxi driver, receptionist, cleaner, security guard, shop assistant, waiter, chef, manager; school, hospital, office, restaurant, shop, bank",
+    navigate_ref: "2.2 What's your job? (pp 18-19) and 2.3 Where are they? (pp 20-21), reference only",
+    plan: "Warm-up + homework check > Exposure: staff board and school tour audio > Test 1: 8 jobs > Clarify: 16 jobs and stress; he/she/they, negatives, questions; I/me chart; introducing people > Say it > Task A info gap > Task B guess the job > Task C find the errors > Functional phone phrases > Task D phone role-plays > Task E my five people > Task F WhatsApp message > Delayed error correction > Recap, confidence, before/after number. Dina speaks about 34 of 60 minutes.",
+    homework: "Voice note about five people (name, job, country, place); a 4-5 line message to a teacher; learn 10 phone phrases.",
+    teacher_notes: "Built after feedback that lesson 2 was too easy and Dina needs to talk more: six speaking tasks, functional language, value table in the Teacher Pack. Object pronouns moved forward from unit 8. Not verified against Oxford 3000 / EGP: headteacher, accountant, receptionist, security guard, message, hold on. Audio is synthetic (Kokoro, Apache 2.0); listen before use." };
   function importPlan(files) {
     return Array.prototype.map.call(files, function (f) {
       var m = IMPORT_MAP.filter(function (x) { return x.re.test(f.name); })[0] || null;
@@ -1367,6 +1385,7 @@
       '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill1" value="1" checked> Also fill in lesson A1.1 number 1 with the Session 1 plan (title, aims, grammar, words, plan, homework)</label>' +
       '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill2" value="1" checked> Also fill in lesson A1.1 number 2 with the Session 2 plan</label>' +
       '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill3" value="1" checked> Also fill in lesson A1.1 number 3 with the Session 3 plan</label>' +
+      '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill4" value="1" checked> Also fill in lesson A1.1 number 4 with the Session 4 plan</label>' +
       '<div class="acts"><button class="btn" type="submit">Upload the matched files</button></div></form></div></div>';
   }
   function importPick(t) {
@@ -1385,7 +1404,9 @@
     var lesson2 = l1 ? S.cur_lessons.filter(function (x) { return x.level_id === l1.id && x.number === 2; })[0] : null;
     var fill3 = document.querySelector('[data-form="importkit"] [name="fill3"]'), fill3On = fill3 && fill3.checked;
     var lesson3 = l1 ? S.cur_lessons.filter(function (x) { return x.level_id === l1.id && x.number === 3; })[0] : null;
-    if (!todo.length && !(fillOn && lesson1) && !(fill2On && lesson2) && !(fill3On && lesson3)) { toast("Choose files first, or tick the lesson 1 box.", true); return done(); }
+    var fill4 = document.querySelector('[data-form="importkit"] [name="fill4"]'), fill4On = fill4 && fill4.checked;
+    var lesson4 = l1 ? S.cur_lessons.filter(function (x) { return x.level_id === l1.id && x.number === 4; })[0] : null;
+    if (!todo.length && !(fillOn && lesson1) && !(fill2On && lesson2) && !(fill3On && lesson3) && !(fill4On && lesson4)) { toast("Choose files first, or tick the lesson 1 box.", true); return done(); }
     var bucket = sb.storage.from("materials"), ok = 0, fail = 0, chain = Promise.resolve();
     todo.forEach(function (x) {
       chain = chain.then(function () {
@@ -1409,6 +1430,10 @@
     if (fill3On && lesson3) chain = chain.then(function () {
       var p = Object.assign({}, IMPORT_LESSON_3, { status: "ready", updated_at: new Date().toISOString() });
       return sb.from("cur_lessons").update(p).eq("id", lesson3.id).then(function (r) { if (r.error) toast(r.error.message, true); });
+    });
+    if (fill4On && lesson4) chain = chain.then(function () {
+      var p = Object.assign({}, IMPORT_LESSON_4, { status: "ready", updated_at: new Date().toISOString() });
+      return sb.from("cur_lessons").update(p).eq("id", lesson4.id).then(function (r) { if (r.error) toast(r.error.message, true); });
     });
     chain.then(function () { toast(ok + " uploaded" + (fail ? ", " + fail + " failed" : "") + "."); return refresh(); }).then(done, done);
   }
