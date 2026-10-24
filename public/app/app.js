@@ -701,7 +701,7 @@
       if (ua !== ub) return ua ? -1 : 1;
       return ua ? (a.starts_at < b.starts_at ? -1 : 1) : (a.starts_at < b.starts_at ? 1 : -1);
     }).map(function (l) {
-      return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " · " + l.duration_min + ' min</span><select data-change="lstatus" data-id="' + l.id + '" aria-label="Lesson status" style="width:auto">' + opt(Object.keys(LSTATUS), l.status, LSTATUS) + "</select></div>" + lessonFiles(l) +
+      return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " · " + l.duration_min + ' min</span><select data-change="lstatus" data-id="' + l.id + '" aria-label="Lesson status" style="width:auto">' + opt(Object.keys(LSTATUS), l.status, LSTATUS) + "</select></div>" + (l.status === "scheduled" && l.starts_at < nowIso ? '<div class="acts"><span class="hint">This lesson has passed.</span><button type="button" class="btn sm" data-act="lmark" data-id="' + l.id + '" data-v="completed">Mark completed</button><button type="button" class="btn sec sm" data-act="lmark" data-id="' + l.id + '" data-v="no_show">No-show</button><button type="button" class="btn sec sm" data-act="lmark" data-id="' + l.id + '" data-v="moved">Moved</button></div>' : "") + lessonFiles(l) +
         '<form data-form="savelesson" data-id="' + l.id + '"><div class="fields"><div class="f"><label for="lt' + l.id + '">Topic</label><input id="lt' + l.id + '" name="topic" value="' + esc(l.topic) + '"></div>' +
         '<div class="f"><label for="lm' + l.id + '">Meeting link</label><input id="lm' + l.id + '" name="meeting_url" type="url" value="' + esc(l.meeting_url) + '"></div>' +
         '<div class="f wide"><label for="ls' + l.id + '">Note the student will see</label><textarea id="ls' + l.id + '" name="summary">' + esc(l.summary) + "</textarea></div></div>" +
@@ -1630,7 +1630,8 @@
     }
     if (ch === "lstatus") {
       var id = t.getAttribute("data-id"), l = byId(S.lessons, id);
-      act(sb.from("lessons").update({ status: t.value }).eq("id", id), "Lesson updated.").then(function () {
+      act(sb.from("lessons").update({ status: t.value }).eq("id", id).select("id"), "Lesson updated.").then(function (rows) {
+        if (!rows || !rows.length) { toast("Nothing was saved. Refresh the page and sign in again; if it repeats, your account may not have admin rights.", true); return; }
         return maybeCompletePackage(l && l.package_id);
       }).then(refresh, refresh);
     }
@@ -1647,6 +1648,14 @@
     var b = e.target.closest("[data-act]"); if (!b) return;
     var a = b.getAttribute("data-act"), id = b.getAttribute("data-id"), v = b.getAttribute("data-v");
     if (academicClick(a, id, v)) return;
+    if (a === "lmark") {
+      var ll = byId(S.lessons, id);
+      act(sb.from("lessons").update({ status: v }).eq("id", id).select("id"), "Lesson updated.").then(function (rows) {
+        if (!rows || !rows.length) { toast("Nothing was saved. Refresh and sign in again.", true); return; }
+        return maybeCompletePackage(ll && ll.package_id);
+      }).then(refresh, refresh);
+      return;
+    }
     if (a === "tab") { UI.tab = v; UI.sent = ""; return renderAuth(); }
     if (a === "again") { UI.sent = ""; return renderAuth(); }
     if (a === "theme") return toggleTheme();
