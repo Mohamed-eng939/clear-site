@@ -1316,16 +1316,24 @@
     { re: /^CLEAR_A1-1_L04_Phone_call_natural\.mp3$/i, lesson: "A1.1:4", kind: "audio", title: "Lesson 4 audio: phone call to school (natural)", student: true },
     { re: /^CLEAR_A1-1_L04_Phone_call_slow\.mp3$/i, lesson: "A1.1:4", kind: "audio", title: "Lesson 4 audio: phone call to school (slow)", student: true },
     { re: /^Track_02_1[3-9]\.mp3$/i, lesson: "A1.1:4", kind: "audio", title: "Navigate audio units 2.2-2.3 (track number as on your CD)", student: false },
-    { re: /^CLEAR_A1-1_L05_Slides\.pptx$/i, lesson: "A1.1:5", kind: "slides", title: "Lesson 5 class slides (22)", student: true },
+    { re: /^CLEAR_A1-1_L05_Slides\.pptx$/i, lesson: "A1.1:5", kind: "slides", title: "Lesson 5 class slides (23)", student: true },
     { re: /^CLEAR_A1-1_L05_Slides\.pdf$/i, lesson: "A1.1:5", kind: "slides", title: "Lesson 5 class slides (view online)", student: true },
     { re: /^CLEAR_A1-1_L05_Handout\.pdf$/i, lesson: "A1.1:5", kind: "handout", title: "Lesson 5 handout", student: true },
-    { re: /^CLEAR_A1-1_L05_Homework\.pdf$/i, lesson: "A1.1:5", kind: "homework", title: "Lesson 5 homework: my family and a message to the teacher", student: true },
+    { re: /^CLEAR_A1-1_L05_Homework\.pdf$/i, lesson: "A1.1:5", kind: "homework", title: "Lesson 5 homework: my questions for the teacher", student: true },
     { re: /^CLEAR_A1-1_L05_Teacher_Pack\.pdf$/i, lesson: "A1.1:5", kind: "notes", title: "Lesson 5 Teacher Pack (private)", student: false },
-    { re: /^CLEAR_A1-1_L05_Navigate_pages_TEACHER_ONLY\.pdf$/i, lesson: "A1.1:5", kind: "other", title: "Navigate Coursebook pages 26-29 (screen-share only)", student: false },
-    { re: /^CLEAR_A1-1_L05_My_family\.mp3$/i, lesson: "A1.1:5", kind: "audio", title: "Lesson 5 audio: Mona's family", student: true },
-    { re: /^CLEAR_A1-1_L05_Teacher_meeting_natural\.mp3$/i, lesson: "A1.1:5", kind: "audio", title: "Lesson 5 audio: the teacher meeting (natural)", student: true },
-    { re: /^CLEAR_A1-1_L05_Teacher_meeting_slow\.mp3$/i, lesson: "A1.1:5", kind: "audio", title: "Lesson 5 audio: the teacher meeting (slow)", student: true },
-    { re: /^Track_03_(0[1-9]|1[01])\.mp3$/i, lesson: "A1.1:5", kind: "audio", title: "Navigate audio units 3.1-3.2 (track number as on your CD)", student: false },
+    { re: /^CLEAR_A1-1_L05_Meeting_questions_natural\.mp3$/i, lesson: "A1.1:5", kind: "audio", title: "Lesson 5 audio: parent asks the teacher (natural)", student: true },
+    { re: /^CLEAR_A1-1_L05_Meeting_questions_slow\.mp3$/i, lesson: "A1.1:5", kind: "audio", title: "Lesson 5 audio: parent asks the teacher (slow)", student: true },
+    { re: /^CLEAR_A1-1_L05_Teacher_report\.mp3$/i, lesson: "A1.1:5", kind: "audio", title: "Lesson 5 audio: the teacher's report on Adam", student: true },
+    { re: /^CLEAR_A1-1_L06_Slides\.pptx$/i, lesson: "A1.1:6", kind: "slides", title: "Lesson 6 class slides (21)", student: true },
+    { re: /^CLEAR_A1-1_L06_Slides\.pdf$/i, lesson: "A1.1:6", kind: "slides", title: "Lesson 6 class slides (view online)", student: true },
+    { re: /^CLEAR_A1-1_L06_Handout\.pdf$/i, lesson: "A1.1:6", kind: "handout", title: "Lesson 6 handout", student: true },
+    { re: /^CLEAR_A1-1_L06_Meeting_card\.pdf$/i, lesson: "A1.1:6", kind: "handout", title: "Dina's Meeting Card (for Sunday 1 November)", student: true },
+    { re: /^CLEAR_A1-1_L06_Homework\.pdf$/i, lesson: "A1.1:6", kind: "homework", title: "Lesson 6 homework: before Sunday's meeting", student: true },
+    { re: /^CLEAR_A1-1_L06_Teacher_Pack\.pdf$/i, lesson: "A1.1:6", kind: "notes", title: "Lesson 6 Teacher Pack (private)", student: false },
+    { re: /^CLEAR_A1-1_L06_My_child_model\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Lesson 6 audio: a mum describes her child", student: true },
+    { re: /^CLEAR_A1-1_L06_Tricky_teacher\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Lesson 6 audio: a fast teacher", student: true },
+    { re: /^CLEAR_A1-1_L06_Full_meeting_natural\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Lesson 6 audio: the full meeting (natural)", student: true },
+    { re: /^CLEAR_A1-1_L06_Full_meeting_slow\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Lesson 6 audio: the full meeting (slow)", student: true },
     { re: /^CLEAR_A1_Division_and_Navigate_map\.pdf$/i, lesson: "A1.1:1", kind: "notes", title: "A1 division (3 levels, 24 lessons) and Navigate content map", student: false },
     { re: /^Track_01_02\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.2: Hello conversation, listen for stress", student: false },
     { re: /^Track_01_03\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.3: repeat the conversation", student: false },
@@ -1334,15 +1342,6 @@
     { re: /^Track_01_06\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.6: check and repeat Havva and Paul", student: false },
     { re: /^Track_01_07\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.7: Sunil and Julie (be)", student: false },
     { re: /^Track_01_08\.mp3$/i, lesson: "A1.1:1", kind: "audio", title: "Navigate track 1.8: statements or questions", student: false },
-    { re: /^Track_03_12\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.12: family, check answers", student: false },
-    { re: /^Track_03_13\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.13: family words, repeat", student: false },
-    { re: /^Track_03_14\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.14: talking about a family photo", student: false },
-    { re: /^Track_03_15\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.15: my, your, his, her, our, their", student: false },
-    { re: /^Track_03_16\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.16: possessive 's, sound /z/", student: false },
-    { re: /^Track_03_17\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.17: Elsa talks about her family", student: false },
-    { re: /^Track_03_18\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.18: missing words with 's", student: false },
-    { re: /^Track_03_19\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.19: Bruno talks about his friend", student: false },
-    { re: /^Track_03_20\.mp3$/i, lesson: "A1.1:6", kind: "audio", title: "Navigate track 3.20: Mia talks about four people", student: false }
   ];
   var IMPORT_LESSON_1 = { title: "Hello! This is my family",
     objective: "Greet and introduce yourself and your children; exchange basic information (name, age, where you are from, how many children) with a teacher.",
@@ -1376,14 +1375,22 @@
     plan: "Warm-up + homework check > 16 jobs and staff board > Test 1: country / nationality / language > Ten characters (model) > Question words > he / she / they, negatives, questions > my / your / his / her > Introducing a person > Say it > Task A info gap > Task B guess the job > Task C find the errors > Task E my five people > Fix it > Recap. Session 1 stopped at slide 14; next: slide 9 homework check, then slides 15-22.",
     homework: "Write questions and answers for the ten characters on slide 9 (at least 3 each); optional 30-second voice note about three people you know.",
     teacher_notes: "Updated to the teacher's edited 22-slide deck: the phone-call box, Task D and Task F were removed (the phone goal moves to a later lesson). Not verified against Oxford 3000 / EGP: housewife, professor, soccer player, headteacher, accountant, receptionist, security guard. Slide 9 cartoons are not original: check their licence. Audio is synthetic (Kokoro, Apache 2.0)." };
-  var IMPORT_LESSON_5 = { title: "Describe it!",
-    objective: "Describe people, a family and a home with adjectives and have got, and take part in a short conversation with a child's teacher.",
-    grammar: "adjective + noun (adjective before the noun); man/men, woman/women, child/children, person/people; have got / has got, haven't / hasn't got, Have you got...? Has he got...?, short answers; very, and, but; any in questions",
-    vocabulary: "big, small, new, old, good, bad, hot, cold, happy, sad, easy, hard, tall, short, cheap, expensive, friendly, kind, clever, funny, quiet, noisy, lovely, great, nice, busy",
-    navigate_ref: "3.1 My neighbours (pp 26-27) and 3.2 Possessions (pp 28-29), reference only",
-    plan: "Warm-up + homework check > Exposure: Mona's family text and audio > Test 1: describe 8 pictures > Clarify: 16 opposite adjectives + 10 more; adjective + noun and irregular plurals; have got, negatives, questions > Functional: describing; the teacher meeting > Say it > Task A info gap > Task B guess my person > Task C find the errors > Task D parent-teacher role-plays > Task E my family and home > Task F message to the teacher > Delayed error correction > Recap, confidence, before/after word count. Dina speaks about 34 of 60 minutes.",
-    homework: "Voice note about your family and home with 8 describing words; a 5-line message to your child's teacher; learn 10 meeting phrases.",
-    teacher_notes: "Built after feedback that lesson 2 was too easy and Dina needs to talk more: six speaking tasks, functional language, value table in the Teacher Pack. 'very' is included although the division doc lists it as omitted (needed for 'He's very clever'); 'a bit', 'any', 'What's he like?' are chunks. Not verified against Oxford 3000 / EGP: noisy, busy, bedroom, desk, kind, tall, short, easy, quiet. Audio is synthetic (Kokoro, Apache 2.0); listen before use." };
+  var IMPORT_LESSON_5 = { title: "Ask like a pro (meeting preparation 1)",
+    objective: "Build correct questions for a parent-teacher meeting (is / does / can / wh-), ask about progress, homework, behaviour and help, and repair the conversation politely.",
+    grammar: "question machine (wh- word + helper + person + verb); is / are, do / does (no -s), can / could; short answers; repair and check phrases",
+    vocabulary: "24 school words (subjects, school things, skills, school life) and 20 progress words (good at, improve, polite, shy, confident, concentrate, participate, progress, behaviour, effort)",
+    navigate_ref: "Off-course lesson (A1+ / A2): no Navigate pages",
+    plan: "Warm-up + homework check (10 characters) > Roadmap to Sunday 1 November > Test 1: make the question > Exposure: parent asks the teacher > Clarify: question machine, is/are, do/does, can/could > Vocabulary: school and progress words > Functional: start and ask; repair and check > Say it > Task A question builder > Task B interview the teacher > Task C find and fix > Task D my 10 questions > Task E one-minute mini-meeting > Fix it > Recap. Dina speaks about 33 of 60 minutes.",
+    homework: "Finish and record 10 questions for the meeting; write 3 questions about a subject you worry about; learn 6 phrases.",
+    teacher_notes: "Off-course lesson for the meeting on Sunday 1 November: present-simple questions brought forward because the goal needs them. Built after the note that she has difficulty framing questions and sentence structure but good vocabulary. Not verified against Oxford 3000 / EGP: timetable, headteacher, behaviour, attention, concentrate, participate, progress, effort. Audio is synthetic (Kokoro, Apache 2.0). The earlier 'Describe it!' kit (adjectives, have got) is parked for a later lesson." };
+  var IMPORT_LESSON_6 = { title: "Speak with confidence (meeting preparation 2)",
+    objective: "Describe a child (strengths and a concern) with correct he / she -s and doesn't, follow a six-step meeting map, repair when the teacher is fast, and rehearse the full meeting.",
+    grammar: "he / she + verb -s; doesn't / don't + verb; the 'but' pattern; good at / not very good at / finds ... difficult; I'm happy with / I'm a little worried about; I'd like to (chunk); polite opening and closing",
+    vocabulary: "clever, hard-working, creative, active, curious, shy, polite, confident, quiet, kind, spelling, grammar, reading aloud, confidence, progress, concentrate, participate",
+    navigate_ref: "Off-course lesson (A1+ / A2): no Navigate pages",
+    plan: "Warm-up + homework check (her 10 questions) > Test 1: one-minute monologue about her child > Exposure: a mum describes Lina > Clarify: he/she -s, doesn't and 'but', strengths and concerns > Vocabulary: 20 words for a child > Functional: opening and closing; the 6-step meeting map > Say it > Task A sentence builder > Task B describe the child again (after numbers) > Task C fast teacher and repair > Task D full meeting 1 > Task E full meeting 2 with surprises > Fix it > Recap and the Meeting Card. Task F (thank-you message) is homework. Dina speaks about 36 of 60 minutes.",
+    homework: "Read the Meeting Card twice a day; write 3 opening sentences; record a 2-minute rehearsal on Friday; finish the thank-you message; message me after the meeting.",
+    teacher_notes: "Off-course lesson 2 of 2 before the parent-teacher meeting on Sunday 1 November; ends with her Meeting Card. Present simple and 'but' brought forward from A1.2. Not verified against Oxford 3000 / EGP: creative, curious, hard-working, worried, advice, participate. Audio is synthetic (Kokoro, Apache 2.0); listen before use." };
   function importPlan(files) {
     return Array.prototype.map.call(files, function (f) {
       var m = IMPORT_MAP.filter(function (x) { return x.re.test(f.name); })[0] || null;
@@ -1405,6 +1412,7 @@
       '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill3" value="1" checked> Also fill in lesson A1.1 number 3 with the Session 3 plan</label>' +
       '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill4" value="1" checked> Also fill in lesson A1.1 number 4 with the Session 4 plan</label>' +
       '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill5" value="1" checked> Also fill in lesson A1.1 number 5 with the Session 5 plan</label>' +
+      '<label class="chk" style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="fill6" value="1" checked> Also fill in lesson A1.1 number 6 with the Session 6 plan</label>' +
       '<div class="acts"><button class="btn" type="submit">Upload the matched files</button></div></form></div></div>';
   }
   function importPick(t) {
@@ -1427,7 +1435,9 @@
     var lesson4 = l1 ? S.cur_lessons.filter(function (x) { return x.level_id === l1.id && x.number === 4; })[0] : null;
     var fill5 = document.querySelector('[data-form="importkit"] [name="fill5"]'), fill5On = fill5 && fill5.checked;
     var lesson5 = l1 ? S.cur_lessons.filter(function (x) { return x.level_id === l1.id && x.number === 5; })[0] : null;
-    if (!todo.length && !(fillOn && lesson1) && !(fill2On && lesson2) && !(fill3On && lesson3) && !(fill4On && lesson4) && !(fill5On && lesson5)) { toast("Choose files first, or tick the lesson 1 box.", true); return done(); }
+    var fill6 = document.querySelector('[data-form="importkit"] [name="fill6"]'), fill6On = fill6 && fill6.checked;
+    var lesson6 = l1 ? S.cur_lessons.filter(function (x) { return x.level_id === l1.id && x.number === 6; })[0] : null;
+    if (!todo.length && !(fillOn && lesson1) && !(fill2On && lesson2) && !(fill3On && lesson3) && !(fill4On && lesson4) && !(fill5On && lesson5) && !(fill6On && lesson6)) { toast("Choose files first, or tick the lesson 1 box.", true); return done(); }
     var bucket = sb.storage.from("materials"), ok = 0, fail = 0, chain = Promise.resolve();
     todo.forEach(function (x) {
       chain = chain.then(function () {
@@ -1459,6 +1469,10 @@
     if (fill5On && lesson5) chain = chain.then(function () {
       var p = Object.assign({}, IMPORT_LESSON_5, { status: "ready", updated_at: new Date().toISOString() });
       return sb.from("cur_lessons").update(p).eq("id", lesson5.id).then(function (r) { if (r.error) toast(r.error.message, true); });
+    });
+    if (fill6On && lesson6) chain = chain.then(function () {
+      var p = Object.assign({}, IMPORT_LESSON_6, { status: "ready", updated_at: new Date().toISOString() });
+      return sb.from("cur_lessons").update(p).eq("id", lesson6.id).then(function (r) { if (r.error) toast(r.error.message, true); });
     });
     chain.then(function () { toast(ok + " uploaded" + (fail ? ", " + fail + " failed" : "") + "."); return refresh(); }).then(done, done);
   }
