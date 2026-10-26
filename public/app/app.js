@@ -1046,7 +1046,9 @@
           var n = curFiles(l.id).length;
           return '<div class="card"><div class="l1"><span class="t">' + lessonNo(l) + ". " + esc(l.title) + '</span><span class="pills"><span class="pill ' + (l.status === "ready" ? "ok" : l.status === "drafting" ? "warn" : "") + '">' + esc(CSTATUS[l.status]) + '</span><span class="pill">' + n + (n === 1 ? " file" : " files") + "</span></span></div>" +
             '<span class="hint">' + esc(l.objective || "") + (l.navigate_ref ? " · Navigate " + esc(l.navigate_ref) : "") + "</span>" +
-            '<div class="acts"><button type="button" class="btn sec sm" data-act="aclesson" data-id="' + l.id + '">Open lesson kit</button></div></div>';
+            (!l.plan ? '<span class="hint" style="color:var(--warn,#e0a526)">The staged plan is not written yet.</span>' : "") +
+            '<div class="acts"><button type="button" class="btn sec sm" data-act="aclesson" data-id="' + l.id + '">Open lesson kit</button>' +
+            '<label class="hint" for="cs' + l.id + '" style="margin-left:auto">Status</label><select id="cs' + l.id + '" data-change="curstatus" data-id="' + l.id + '" aria-label="Lesson status" style="width:auto">' + opt(Object.keys(CSTATUS), l.status, CSTATUS) + "</select></div></div>";
         }).join("") + "</div></div>";
       }).join("");
   }
@@ -1221,7 +1223,16 @@
   function acSchedule() {
     var from = new Date(); from.setHours(0, 0, 0, 0);
     var up = S.lessons.filter(function (l) { return l.status === "scheduled" && new Date(l.starts_at) >= from; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
-    if (!up.length) return '<div class="empty"><b>No upcoming lessons</b>Schedule lessons from a student\'s profile, then link each one to a lesson in the plan here.</div>';
+    var nowD = new Date();
+    var past = S.lessons.filter(function (l) { return l.status !== "scheduled" || new Date(l.starts_at) < from; }).filter(function (l) { return !(l.status === "scheduled" && new Date(l.starts_at) >= from); }).sort(function (a, b) { return a.starts_at < b.starts_at ? 1 : -1; });
+    var pastHtml = past.length ? '<div class="day" style="margin-top:22px">Previous lessons: did she attend?</div>' + past.map(function (l) {
+      var cl = l.cur_lesson_id ? byId(S.cur_lessons, l.cur_lesson_id) : null, pending = l.status === "scheduled";
+      return '<div class="card" style="margin-bottom:8px"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " · " + esc(studentName(l.student_id)) + '</span><span class="pills"><span class="pill ' + (l.status === "completed" ? "ok" : pending ? "warn" : "") + '">' + (pending ? "Not marked yet" : l.status === "completed" ? "Attended" : esc(LSTATUS[l.status])) + "</span></span></div>" +
+        '<span class="hint">' + (cl ? "Plan: " + esc(lessonNo(cl) + ". " + cl.title) : "No plan lesson linked") + (l.topic ? " · " + esc(l.topic) : "") + "</span>" +
+        '<div class="fields"><div class="f"><label for="at' + l.id + '">Attendance</label><select id="at' + l.id + '" data-change="attend" data-id="' + l.id + '">' + opt(Object.keys(LSTATUS), l.status, LSTATUS) + "</select></div>" +
+        '<div class="f"><label for="lc' + l.id + '">Lesson in the plan</label><select id="lc' + l.id + '" data-change="lcur" data-id="' + l.id + '">' + curOptions(l.cur_lesson_id) + "</select></div></div></div>";
+    }).join("") : "";
+    if (!up.length) return '<div class="empty"><b>No upcoming lessons</b>Schedule lessons from a student\'s profile, then link each one to a lesson in the plan here.</div>' + pastHtml;
     var out = "", last = "";
     up.forEach(function (l) {
       var k = dayKey(l.starts_at), cl = l.cur_lesson_id ? byId(S.cur_lessons, l.cur_lesson_id) : null;
@@ -1231,7 +1242,7 @@
         '<div class="fields"><div class="f"><label for="lc' + l.id + '">Lesson in the plan</label><select id="lc' + l.id + '" data-change="lcur" data-id="' + l.id + '">' + curOptions(l.cur_lesson_id) + "</select></div></div>" +
         (cl ? '<div class="acts"><button type="button" class="btn sec sm" data-act="aclesson" data-id="' + cl.id + '">Open lesson kit</button></div>' : "") + "</div>";
     });
-    return out;
+    return out + pastHtml;
   }
 
   /* ---- homework */
@@ -1484,7 +1495,14 @@
         '<span class="hint">' + esc(x.publisher || "") + (x.used_for ? " · " + esc(x.used_for) : "") + "</span>" + (x.licence ? '<span class="hint">Licence: ' + esc(x.licence) + "</span>" : "") + (x.notes ? "<p>" + esc(x.notes) + "</p>" : "") +
         '<div class="acts"><button type="button" class="btn danger sm" data-act="delsrc" data-id="' + x.id + '">Delete</button></div></div>';
     }).join("");
-    return '<div class="panel"><div class="sec"><h3>Books and sources</h3><div class="cards">' + (rows || '<p class="hint">No sources yet.</p>') + "</div></div>" +
+    var lvls = S.cur_levels.map(function (lv) {
+      var ls = S.cur_lessons.filter(function (l) { return l.level_id === lv.id; }).sort(function (a, b) { return a.number - b.number; });
+      return '<div class="card"><div class="l1"><span class="t">' + esc(lv.code + " " + lv.name) + '</span><span class="pills"><span class="pill ' + (ls.length && ls.every(function (l) { return l.status === "ready"; }) ? "ok" : "") + '">' + ls.filter(function (l) { return l.status === "ready"; }).length + " / " + ls.length + " ready</span></span></div>" +
+        '<span class="hint">' + esc(lv.summary || "") + "</span><ol style=\"margin:8px 0 0 18px;padding:0\">" + ls.map(function (l) {
+          return "<li><a href=\"#/academic/lesson/" + l.id + "\">" + esc(l.title) + "</a> <span class=\"hint\">· " + esc(CSTATUS[l.status]) + " · " + curFiles(l.id).length + " files" + (l.navigate_ref ? " · Navigate " + esc(l.navigate_ref) : "") + "</span></li>";
+        }).join("") + "</ol></div>";
+    }).join("");
+    return '<div class="panel"><div class="sec"><h3>The curriculum: General English A1 (the division and its lessons)</h3><p class="hint">Everything in the plan, level by level. Click a lesson to open its kit.</p><div class="cards">' + (lvls || '<p class="hint">No levels yet.</p>') + '</div></div><div class="sec"><h3>Books and sources</h3><div class="cards">' + (rows || '<p class="hint">No sources yet.</p>') + "</div></div>" +
       '<div class="sec"><h3>Add a source</h3><form data-form="addsrc" class="addbox"><div class="fields"><div class="f wide"><label for="sr1">Title</label><input id="sr1" name="title" required></div>' +
       '<div class="f"><label for="sr2">Type</label><select id="sr2" name="kind">' + opt(Object.keys(SRC_KINDS), "other", SRC_KINDS) + "</select></div>" +
       '<div class="f"><label for="sr3">Publisher or owner</label><input id="sr3" name="publisher"></div><div class="f wide"><label for="sr4">Link</label><input id="sr4" name="url" type="url"></div>' +
@@ -1563,6 +1581,20 @@
   }
   function academicChange(t, ch) {
     if (ch === "importpick") { importPick(t); return true; }
+    if (ch === "curstatus") {
+      act(sb.from("cur_lessons").update({ status: t.value, updated_at: new Date().toISOString() }).eq("id", t.getAttribute("data-id")).select("id")).then(function (rows) {
+        if (!rows || !rows.length) { toast("Nothing was saved. Refresh and sign in again.", true); } else toast("Status saved: " + CSTATUS[t.value] + ".");
+      }).then(refresh, refresh);
+      return true;
+    }
+    if (ch === "attend") {
+      var al = byId(S.lessons, t.getAttribute("data-id"));
+      act(sb.from("lessons").update({ status: t.value }).eq("id", t.getAttribute("data-id")).select("id")).then(function (rows) {
+        if (!rows || !rows.length) { toast("Nothing was saved. Refresh and sign in again.", true); return; }
+        toast("Attendance saved."); return maybeCompletePackage(al && al.package_id);
+      }).then(refresh, refresh);
+      return true;
+    }
     if (ch === "lcur") {
       var id = t.getAttribute("data-id"), l = byId(S.lessons, id), c = t.value ? byId(S.cur_lessons, t.value) : null;
       var patch = { cur_lesson_id: t.value || null };
