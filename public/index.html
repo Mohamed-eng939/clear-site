@@ -168,6 +168,8 @@ section{padding-block:clamp(56px,9vw,96px);scroll-margin-top:64px}
 .book h2{font-size:clamp(28px,4.4vw,40px);line-height:1.15}
 .book .lede{margin-top:16px;font-size:18px;color:#d5dae3}
 .book form{display:grid;gap:16px}
+.book .hint2{font-size:14px;color:#aab3c5;margin:4px 0 0}
+.book .two{display:flex;flex-wrap:wrap;gap:12px}
 .field{display:grid;gap:6px;min-width:0}
 .field label{font-weight:600;font-size:15px}
 .field input,.field select,.field textarea{width:100%;font:400 16px/1.4 var(--font-text);color:var(--ink);background:var(--surface);border:1.5px solid var(--line-strong);border-radius:var(--r-md);padding:12px 14px}
@@ -329,12 +331,17 @@ footer .fcol{display:grid;gap:6px}
     <p class="or" id="orLine" hidden>Or send us a message instead</p>
     <form id="bookForm" novalidate>
       <div class="field"><label for="fName">Your name</label><input id="fName" name="name" type="text" autocomplete="name" required><div class="err" id="nameErr" role="alert"></div></div>
+      <div class="field"><label for="fPhone">Your WhatsApp number</label><input id="fPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+20 100 000 0000" required><div class="hint2">Include your country code. We send your result and plan to this number.</div><div class="err" id="phoneErr" role="alert"></div></div>
+      <div class="field"><label for="fEmail">Email (optional)</label><input id="fEmail" name="email" type="email" inputmode="email" autocomplete="email"></div>
       <div class="field"><label for="fProgram">Program</label><select id="fProgram" name="program"><option value="">Not sure yet</option><option value="general">General English</option><option value="business">Business English</option><option value="conversation">Conversation</option><option value="esp">ESP (English for Specific Purposes)</option></select></div>
       <div class="field"><label for="fPack">Package</label><select id="fPack" name="pack"><option value="">Not sure yet</option><option value="1">1 level (8 lessons)</option><option value="2">2 levels (16 lessons), save 8%</option><option value="3">3 levels (24 lessons), save 12%</option></select></div>
       <div class="field"><label for="fGoal">What do you need English for?</label><textarea id="fGoal" name="goal"></textarea></div>
       <div class="field"><label for="fWhen">Where do you live, and when are you free?</label><input id="fWhen" name="when" type="text"></div>
       <div class="field"><label class="ck" for="fTerms"><input id="fTerms" type="checkbox"><span>I accept the terms: payments are non-refundable except where the law gives me a right to cancel, unused lessons can be transferred to a learner I refer, and lessons are rescheduled through the academy with 24 hours' notice. I ask the academy to start my lessons within 14 days of paying.</span></label><div class="err" id="termsErr" role="alert"></div></div>
-      <div><button class="btn btn-primary" type="submit">Prepare my message</button></div>
+      <div class="field"><label class="ck" for="fConsent"><input id="fConsent" type="checkbox"><span>For the online placement test only: I agree that my answers and my speaking recording (and my video, if I switch the camera on) are stored, reviewed by the CLEAR team, and used to improve how CLEAR scores placement tests. I can ask for my data to stop being used.</span></label><div class="err" id="consentErr" role="alert"></div></div>
+      <p class="hint2">Choose how you want to take your placement test:</p>
+      <div class="two"><button class="btn btn-primary" type="submit" data-path="online" id="btnOnline">Take the online placement test now</button><button class="btn btn-secondary" type="submit" data-path="meeting" id="btnMeeting">Book a meeting instead</button></div>
+      <div class="err" id="formErr" role="alert"></div>
     </form>
     <div class="out" id="out" hidden>
       <pre id="msg"></pre>
@@ -432,15 +439,45 @@ var PAY_LINKS = {       /* paste payment links here, e.g. general:{1:"https://..
   nameEl.addEventListener('input',function(){nameErr.textContent='';});
   var termsEl=document.getElementById('fTerms'), termsErr=document.getElementById('termsErr');
   termsEl.addEventListener('change',function(){termsErr.textContent='';});
+  var phoneEl=document.getElementById('fPhone'), phoneErr=document.getElementById('phoneErr'), consentEl=document.getElementById('fConsent'), consentErr=document.getElementById('consentErr'), formErr=document.getElementById('formErr');
+  var SB={url:'https://coiopojghswotjghcfln.supabase.co',key:'sb_publishable_hBROFivygjlNmnev0ey0eA_2eLOD_CQ'};
+  var SRC=''; try{SRC=(new URLSearchParams(location.search).get('src')||sessionStorage.getItem('clear-src')||'').slice(0,80); if(SRC) sessionStorage.setItem('clear-src',SRC);}catch(e){}
+  var CONSENT_VERSION='2026-10-v1', sending=false, lastPath='meeting';
+  form.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('button[data-path]'); if(b) lastPath=b.getAttribute('data-path');});
+  phoneEl.addEventListener('input',function(){phoneErr.textContent='';}); consentEl.addEventListener('change',function(){consentErr.textContent='';});
+  function normPhone(v){var d=String(v||'').replace(/[^\d+]/g,''); if(d.indexOf('00')===0) d='+'+d.slice(2); if(/^01\d{9}$/.test(d)) d='+2'+d; return d;}
+  function register(path,name,phone,key,pk){
+    return fetch(SB.url+'/rest/v1/rpc/pl_register',{method:'POST',headers:{'apikey':SB.key,'Authorization':'Bearer '+SB.key,'Content-Type':'application/json'},
+      body:JSON.stringify({p_name:name,p_phone:phone,p_email:document.getElementById('fEmail').value.trim()||null,p_country:null,p_goal:document.getElementById('fGoal').value.trim()||null,
+        p_availability:document.getElementById('fWhen').value.trim()||null,p_program:key||null,p_levels:pk?pk.levels:null,p_path:path,p_src:SRC||null,p_consent:consentEl.checked,p_consent_version:CONSENT_VERSION})})
+      .then(function(r){return r.json().then(function(j){if(!r.ok) throw new Error(j&&j.message||'failed'); return j;});});
+  }
   form.addEventListener('submit',function(e){
     e.preventDefault();
-    var name=nameEl.value.trim();
+    if(sending) return;
+    var path=(e.submitter&&e.submitter.getAttribute('data-path'))||lastPath;
+    formErr.textContent='';
+    var name=nameEl.value.trim(), phone=normPhone(phoneEl.value);
     if(!name){nameErr.textContent='Enter your name so we know who to reply to.';nameEl.focus();return;}
+    if(!/^\+?[0-9]{7,16}$/.test(phone)){phoneErr.textContent='Enter your WhatsApp number with the country code, for example +20 100 000 0000.';phoneEl.focus();return;}
     if(!termsEl.checked){termsErr.textContent='Tick the box to accept the terms before you continue.';termsEl.focus();return;}
+    if(path==='online'&&!consentEl.checked){consentErr.textContent='To take the online test, please tick the box about recordings.';consentEl.focus();return;}
+    var key0=progEl.value, pk0=PACKS.filter(function(p){return String(p.levels)===packEl.value;})[0];
+    sending=true; var btns=form.querySelectorAll('button[type=submit]'); btns.forEach(function(b){b.disabled=true;});
+    register(path,name,phone,key0,pk0).then(function(r){
+      if(path==='online'){ location.href='placement/?lead='+encodeURIComponent(r.lead_id); return; }
+      showMessage(name,phone);
+    },function(err){
+      var m=String(err&&err.message||'');
+      if(path==='online'){ formErr.textContent=/too_many/.test(m)?'Too many tries from this number today. Please message us on WhatsApp.':'We could not start the test. Check your connection and try again, or message us on WhatsApp.'; return; }
+      showMessage(name,phone);     /* a meeting request still works by WhatsApp even if the saving step fails */
+    }).then(function(){sending=false; btns.forEach(function(b){b.disabled=false;});});
+  });
+  function showMessage(name,phone){
     var key=progEl.value, lv=packEl.value, pk=PACKS.filter(function(p){return String(p.levels)===lv;})[0];
     var progTxt=key?PRICES[key].name:'Not sure yet', packTxt='Not sure yet';
     if(pk){packTxt=(pk.levels===1?'1 level':pk.levels+' levels')+' ('+(pk.levels*8)+' lessons)'; if(key){var t=total(key,pk);packTxt+=', '+fmtUsd(t.usd);}}
-    var lines=['Hello, I would like to book a placement test at CLEAR English Academy.','Name: '+name,'Program: '+progTxt,'Package: '+packTxt];
+    var lines=['Hello, I would like to book a placement test at CLEAR English Academy.','Name: '+name,'WhatsApp: '+phone,'Program: '+progTxt,'Package: '+packTxt];
     lines.push('I accept the terms: non-refundable payments except where the law gives me a right to cancel, unused lessons transferable to a learner I refer, rescheduling through the academy with 24 hours notice. I ask the academy to start my lessons within 14 days of paying.');
     var goal=document.getElementById('fGoal').value.trim(), when=document.getElementById('fWhen').value.trim();
     if(goal) lines.push('I need English for: '+goal);
@@ -454,7 +491,7 @@ var PAY_LINKS = {       /* paste payment links here, e.g. general:{1:"https://..
     var link=(key&&pk&&PAY_LINKS[key]&&PAY_LINKS[key][pk.levels])||'';
     if(link){pay.href=link;pay.hidden=false;} else {pay.hidden=true;}
     out.scrollIntoView({block:'nearest'});
-  });
+  }
   copyBtn.addEventListener('click',function(){
     var done=function(){copyBtn.textContent='Copied';setTimeout(function(){copyBtn.textContent='Copy message';},2000);};
     var fallback=function(){var r=document.createRange();r.selectNodeContents(msg);var s=window.getSelection();s.removeAllRanges();s.addRange(r);hint.textContent='Message selected. Copy it with your keyboard.';};
