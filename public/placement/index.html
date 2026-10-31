@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>CLEAR online placement test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600&family=Noto+Sans+Arabic:wght@400;600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --surface:#ffffff; --surface-soft:#f3f4f6; --ink:#16181d; --ink-soft:#5b6577;
+  --line:#d9dce2; --line-strong:#6b7385; --brand:#e63946; --action:#c42b38; --on-action:#ffffff;
+  --night:#16181d; --on-night:#ffffff; --steel:#8d99ae; --positive:#1b7f5f; --focus:#0b63ce;
+  --warn:#8a5300; --warn-bg:#fff4dd; --pick:#e8f0fe;
+  --font-display:Montserrat,"Segoe UI",system-ui,sans-serif;
+  --font-text:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --font-ar:"Noto Sans Arabic","Segoe UI",Tahoma,system-ui,sans-serif;
+  --r-md:8px; --r-lg:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --surface:#16181d; --surface-soft:#1f2229; --ink:#f4f5f7; --ink-soft:#a9b2c3;
+    --line:#2e323b; --line-strong:#8d99ae; --action:#ff6b76; --on-action:#16181d;
+    --positive:#5fd0a4; --focus:#7fb2ff; --warn:#f0b45a; --warn-bg:#2d2414; --pick:#1f2d46; color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{height:100%}
+body{margin:0;background:var(--surface);color:var(--ink);font:400 17px/1.6 var(--font-text);-webkit-text-size-adjust:100%}
+h1,h2,h3{font-family:var(--font-display);font-weight:600;margin:0 0 .5em;text-wrap:balance}
+h1{font-size:26px;line-height:1.25} h2{font-size:21px;line-height:1.3}
+p{margin:0 0 .9em}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:calc(10px + env(safe-area-inset-top,0px)) 16px 10px;background:var(--surface);border-bottom:1px solid var(--line);min-height:62px}
+.brand{font:600 16px/1 var(--font-display);letter-spacing:.14em}
+.brand small{display:block;margin-top:5px;font:400 12px/1 var(--font-text);letter-spacing:.02em;color:var(--ink-soft)}
+#timer{display:none;font:600 22px/1 var(--font-display);font-variant-numeric:tabular-nums;padding:10px 14px;border-radius:var(--r-md);
+  border:2px solid var(--line-strong);background:var(--surface-soft);min-width:92px;text-align:center}
+#timer.on{display:block}
+#timer.low{border-color:var(--warn);background:var(--warn-bg);color:var(--warn)}
+@media (prefers-reduced-motion:no-preference){#timer.low{animation:pulse 1s ease-in-out infinite}}
+@keyframes pulse{50%{opacity:.72}}
+main{max-width:780px;margin:0 auto;padding:22px 16px 120px}
+.card{border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;background:var(--surface);margin-bottom:16px}
+.card.soft{background:var(--surface-soft)}
+.bi{display:grid;grid-template-columns:1fr;gap:16px}
+@media (min-width:720px){.bi{grid-template-columns:1fr 1fr}}
+.ar{direction:rtl;text-align:right;font-family:var(--font-ar);line-height:1.9}
+.ar h2,.ar h1{font-family:var(--font-ar);font-weight:600}
+.label{font:600 12px/16px var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:10px}
+.btn{display:inline-block;font:600 16px/1.2 var(--font-display);padding:15px 24px;border-radius:var(--r-md);border:2px solid transparent;cursor:pointer;min-height:48px;
+  background:var(--action);color:var(--on-action)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.secondary{background:transparent;color:var(--ink);border-color:var(--line-strong)}
+.btn.quiet{background:transparent;color:var(--ink-soft);border-color:transparent;text-decoration:underline;padding:12px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.row.end{justify-content:flex-end}
+.note{background:var(--warn-bg);color:var(--warn);border-radius:var(--r-md);padding:10px 14px;font-size:15px;margin-bottom:14px}
+.ok{color:var(--positive)}
+.q{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.stem{font:600 21px/1.45 var(--font-display);margin:0 0 18px}
+.opts{display:grid;gap:10px}
+.opt{display:flex;gap:12px;align-items:flex-start;text-align:left;width:100%;padding:14px 16px;border:2px solid var(--line);border-radius:var(--r-md);background:var(--surface);
+  color:var(--ink);font:400 18px/1.4 var(--font-text);cursor:pointer;min-height:52px}
+.opt:hover{border-color:var(--line-strong)}
+.opt[aria-pressed="true"]{border-color:var(--focus);background:var(--pick)}
+.opt .k{flex:none;width:28px;height:28px;border-radius:50%;border:2px solid var(--line-strong);display:grid;place-items:center;font:600 13px/1 var(--font-display)}
+.opt[aria-pressed="true"] .k{background:var(--focus);border-color:var(--focus);color:#fff}
+.passage{border-left:4px solid var(--brand);padding:6px 0 6px 16px;margin:0 0 22px;font-size:18px;line-height:1.7}
+.qblock{margin-bottom:26px}
+.bar{height:10px;border-radius:5px;background:var(--surface-soft);border:1px solid var(--line);overflow:hidden}
+.bar>i{display:block;height:100%;width:0;background:var(--positive);transition:width .08s linear}
+video.prev{width:100%;max-width:320px;border-radius:var(--r-md);background:#000;transform:scaleX(-1)}
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:15;display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:var(--surface);border-top:1px solid var(--line)}
+.dock .btn{padding:12px 16px;font-size:14px;min-height:44px}
+dialog{border:1px solid var(--line-strong);border-radius:var(--r-lg);background:var(--surface);color:var(--ink);padding:22px;max-width:520px;width:calc(100% - 32px)}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+.gate{position:fixed;inset:0;z-index:50;background:var(--night);color:var(--on-night);display:none;place-items:center;padding:24px;text-align:center}
+.gate.on{display:grid}
+.gate .btn{background:var(--on-night);color:var(--night)}
+.big{font:600 34px/1.3 var(--font-display)}
+.rec{display:inline-flex;align-items:center;gap:8px;font:600 14px/1 var(--font-display)}
+.rec i{width:12px;height:12px;border-radius:50%;background:var(--brand);display:inline-block}
+@media (prefers-reduced-motion:no-preference){.rec i{animation:pulse 1s ease-in-out infinite}}
+.sr{position:absolute;left:-9999px}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="brand">CLEAR<small>Online placement test</small></div>
+  <div id="timer" role="timer" aria-live="off" aria-label="Time left">0:00</div>
+</div>
+<main id="app" aria-live="polite"><div class="card soft"><p>Loading…</p></div></main>
+
+<div class="dock" id="dock" hidden>
+  <button class="btn secondary" id="helpBtn" type="button">I need help · أحتاج مساعدة</button>
+  <button class="btn secondary" id="stuckBtn" type="button" hidden>I'm stuck · أنا عالق</button>
+</div>
+
+<div class="gate" id="gate" role="alertdialog" aria-labelledby="gateT">
+  <div>
+    <p class="big" id="gateT">Please return to full screen<br><span class="ar" dir="rtl" style="display:block">من فضلك عُد إلى وضع ملء الشاشة</span></p>
+    <p style="max-width:460px;margin:0 auto 20px">The clock keeps running. This is recorded for your teacher.<br><span class="ar" dir="rtl">الوقت مستمر، وهذا يُسجَّل ويراه المعلّم.</span></p>
+    <button class="btn" id="gateBtn" type="button">Continue · متابعة</button>
+  </div>
+</div>
+
+<dialog id="helpDlg">
+  <h2>Need help? · هل تحتاج مساعدة؟</h2>
+  <p>Talk to us on WhatsApp, or ask for a call back. Your test stays open.<br><span class="ar" dir="rtl">تحدّث معنا على واتساب أو اطلب أن نتصل بك. اختبارك يبقى مفتوحًا.</span></p>
+  <div class="row" style="flex-direction:column;align-items:stretch">
+    <a class="btn" id="waBtn" target="_blank" rel="noopener" style="text-decoration:none">WhatsApp · واتساب</a>
+    <button class="btn secondary" id="cbBtn" type="button">Call me back · اتصلوا بي</button>
+    <button class="btn secondary" id="mistakeBtn" type="button" hidden>I finished by mistake · أنهيت بالخطأ</button>
+    <p id="helpMsg" class="ok" style="margin:0"></p>
+    <button class="btn quiet" id="helpClose" type="button">Close · إغلاق</button>
+  </div>
+</dialog>
+
+<dialog id="stuckDlg">
+  <h2>Feeling stuck? · هل أنت عالق؟</h2>
+  <p>That's fine. Choose what you want to do.<br><span class="ar" dir="rtl">لا بأس. اختر ما تريد فعله.</span></p>
+  <div class="row" style="flex-direction:column;align-items:stretch">
+    <button class="btn" id="endSec" type="button">End this section and continue · إنهاء هذا القسم والمتابعة</button>
+    <button class="btn secondary" id="endWritten" type="button">Finish the written test, go to speaking · إنهاء الكتابي والانتقال للتحدث</button>
+    <button class="btn quiet" id="stuckClose" type="button">Go back to the question · العودة إلى السؤال</button>
+  </div>
+</dialog>
+
+<script src="../app/config.js"></script>
+<script src="../app/vendor/supabase.js"></script>
+<script src="test.js"></script>
+</body>
+</html>
