@@ -178,3 +178,15 @@ textarea{min-height:76px;resize:vertical}
 .dv .stage{overflow:auto;display:grid;place-items:center;padding:14px}
 .dv canvas{max-width:100%;height:auto;background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.5)}
 .dv .msg{color:#a9b2c3;padding:24px;text-align:center}
+
+/* placement area */
+.pltbl{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0}
+.pltbl th,.pltbl td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.pltbl th{font:600 12px/1.2 var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
+.plrep{max-width:760px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--rl);padding:28px}
+.plrep h3{font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin:22px 0 6px}
+.plhead{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:14px;border-bottom:3px solid var(--brand);margin-bottom:18px}
+.plhead svg{height:34px;width:auto}
+.plbig{background:var(--night);color:var(--on-night);border-radius:var(--rl);padding:18px 22px;margin:16px 0;display:grid;gap:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.plbig .label{color:var(--steel)}
+.plbig b{font:600 40px/1.1 var(--display)}

@@ -328,7 +328,7 @@
   function shell(inner, current) {
     var admin = me.role === "admin";
     var nav = admin
-      ? [["today", "Today"], ["students", "Students"], ["lessons", "Lessons"], ["academic", "Clear Academic"], ["payments", "Payments"], ["account", "Account"]]
+      ? [["today", "Today"], ["students", "Students"], ["lessons", "Lessons"], ["academic", "Clear Academic"], ["placement", "Placement"], ["payments", "Payments"], ["account", "Account"]]
       : [["me", "My learning"]];
     return '<header class="top"><div class="who">' + logo() + '<span class="label">' + (admin ? "Admin" : "Student") + "</span></div>" +
       '<div class="right"><span class="hint">' + esc(me.email) + '</span><button type="button" class="iconbtn" data-act="theme" aria-label="Switch to ' + (theme() === "dark" ? "light" : "dark") + ' mode">' + (theme() === "dark" ? "&#9728;" : "&#9790;") + '</button><button type="button" class="btn sec sm" data-act="signout">Sign out</button></div></header>' +
@@ -344,6 +344,7 @@
     if (r.name === "" || r.name === "today") html = shell(viewToday(), "today");
     else if (r.name === "lessons") html = shell(viewLessons(), "lessons");
     else if (r.name === "academic") html = shell(viewAcademic(r.a || "plan", r.b), "academic");
+    else if (r.name === "placement" && window.CLEAR_PL) html = shell(window.CLEAR_PL.view(r), "placement");
     else if (r.name === "payments") html = shell(viewPayments(), "payments");
     else if (r.name === "account") html = shell(viewAccount(), "account");
     else if (r.name === "receipt" && r.a) html = shell(viewReceipt(r.a), "payments");
@@ -1632,12 +1633,14 @@
     return true;
   }
   function onInput(e) {
+    if (window.CLEAR_PL && window.CLEAR_PL.input(e)) return;
     if (e.target.id === "q") { UI.q = e.target.value; $("#list").innerHTML = studentRows(); return; }
     liveSchedule(e);
   }
   function onChange(e) {
     var t = e.target, ch = t.getAttribute("data-change");
     if (liveSchedule(e)) return;
+    if (window.CLEAR_PL && window.CLEAR_PL.change(t, ch)) return;
     if (academicChange(t, ch)) return;
     if (ch === "viewtz") { UI.viewTz = t.value; try { localStorage.setItem("clear-viewtz", t.value); } catch (e) { /* storage blocked */ } return render(); }
     if (ch === "schedpkg") {
@@ -1679,6 +1682,7 @@
   function onClick(e) {
     var b = e.target.closest("[data-act]"); if (!b) return;
     var a = b.getAttribute("data-act"), id = b.getAttribute("data-id"), v = b.getAttribute("data-v");
+    if (window.CLEAR_PL && window.CLEAR_PL.click(a, id, v, b)) return;
     if (academicClick(a, id, v)) return;
     if (a === "lmark") {
       var ll = byId(S.lessons, id);
@@ -1763,6 +1767,7 @@
     if (kind === "code") return doCode(d);
     if (btn) btn.disabled = true;
     var done = function () { if (btn) btn.disabled = false; };
+    if (window.CLEAR_PL && window.CLEAR_PL.submit(kind, id, d, done, form)) return;
     if (academicSubmit(kind, id, d, done)) return;
     if (kind === "addstudent") {
       act(sb.from("students").insert({ full_name: d.full_name, email: nul(d.email), phone: joinPhone(d.dial, d.phone_local), country: nul(d.country), program: nul(d.program), status: d.status, goal: nul(d.goal) }).select().single(), "Student added.")
@@ -1850,5 +1855,7 @@
 
   /* ------------------------------------------------------------ start */
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
-  window.__clear = { esc: esc, priceFor: priceFor };
+  window.__clear = { esc: esc, priceFor: priceFor, api: function () {
+    return { sb: sb, esc: esc, toast: toast, act: act, ask: ask, unwrap: unwrap, fmtDT: fmtDT, render: render, refresh: refresh, nul: nul, logo: logo, cfgUrl: function () { return window.CLEAR_CONFIG.url; } };
+  } };
 })();
