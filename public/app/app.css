@@ -190,3 +190,17 @@ textarea{min-height:76px;resize:vertical}
 .plbig{background:var(--night);color:var(--on-night);border-radius:var(--rl);padding:18px 22px;margin:16px 0;display:grid;gap:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .plbig .label{color:var(--steel)}
 .plbig b{font:600 40px/1.1 var(--display)}
+
+/* payments: price list, discount and message builder */
+.chk{display:inline-flex;align-items:center;gap:8px;font:600 14px/1.3 var(--display);cursor:pointer;min-height:36px}
+.chk input{width:auto;min-height:0;accent-color:var(--action)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.pcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--rl);padding:14px 16px;display:grid;gap:2px;min-width:0;align-content:start}
+.pcard h3{margin:0 0 6px}
+.prow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;padding:8px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.prow .sub{color:var(--ink-soft);font-size:13px}
+.prow s{color:var(--ink-soft)}
+.prow .pr{text-align:right;white-space:nowrap}
+.msgbox textarea{min-height:430px;line-height:1.55;white-space:pre-wrap}
+pre.sql{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px;overflow:auto;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre}
+@media (max-width:520px){.pgrid{grid-template-columns:minmax(0,1fr)}}
