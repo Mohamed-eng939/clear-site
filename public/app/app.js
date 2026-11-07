@@ -6,11 +6,14 @@
   /* ------------------------------------------------------------ settings */
   /* Prices are fixed in dollars per level (8 one-hour lessons). EGP prices follow the saved exchange rate. */
   var PRICES = {
-    general:      { name: "General English",  ar: "الإنجليزية العامة",                usd: 79 },
-    business:     { name: "Business English", ar: "إنجليزية الأعمال",                 usd: 99 },
-    conversation: { name: "Conversation",     ar: "المحادثة",                         usd: 119 },
-    esp:          { name: "ESP",              ar: "الإنجليزية لأغراض خاصة (ESP)",     usd: 139 }
+    general:        { name: "General English",        ar: "الإنجليزية العامة",                usd: 79,  mins: 60 },
+    business:       { name: "Business English",       ar: "إنجليزية الأعمال",                 usd: 99,  mins: 60 },
+    conversation:   { name: "Conversation",           ar: "المحادثة",                         usd: 119, mins: 60 },
+    esp:            { name: "ESP",                    ar: "الإنجليزية لأغراض خاصة (ESP)",     usd: 139, mins: 60 },
+    ielts_general:  { name: "IELTS General Training", ar: "آيلتس (General Training)",         usd: 179, mins: 120 },
+    ielts_academic: { name: "IELTS Academic",         ar: "آيلتس (Academic)",                 usd: 219, mins: 120 }
   };
+  function progMins(k) { return (PRICES[k] && PRICES[k].mins) || 60; }
   var DEFAULT_RATE = 50.6329;
   var SETUP_SQL = "alter table public.settings\n  add column if not exists instapay text,\n  add column if not exists rate_updated_at timestamptz,\n  add column if not exists rate_source text;";
   /* free exchange-rate services that answer browser requests; the first that works is used */
@@ -632,7 +635,7 @@
     var has = pkg.schedule && pkg.schedule.length;
     return {
       sid: s.id, pkgId: pkg.id,
-      rows: has ? pkg.schedule.map(function (r) { return { dow: Number(r.dow), time: r.time, min: Number(r.min) || 60 }; }) : [{ dow: 1, time: "21:00", min: 60 }, { dow: 4, time: "21:00", min: 60 }],
+      rows: has ? pkg.schedule.map(function (r) { return { dow: Number(r.dow), time: r.time, min: Number(r.min) || progMins(pkg.program) }; }) : [{ dow: 1, time: "21:00", min: progMins(pkg.program) }, { dow: 4, time: "21:00", min: progMins(pkg.program) }],
       tz: EG, start: addDays(todayStr(), 1)
     };
   }
@@ -736,7 +739,7 @@
     return scheduleSection(s) + '<div class="sec"><h3>Lessons</h3><div class="cards">' + (rows || '<p class="hint">No lessons scheduled yet.</p>') + "</div>" +
       '<p class="label">Add a single lesson (a make-up or an extra)</p><form data-form="addlesson" data-id="' + s.id + '" class="addbox"><div class="fields">' +
       '<div class="f"><label for="lw">Date and time</label><input id="lw" name="when" type="datetime-local" required value="' + localInputValue(start) + '"></div>' +
-      '<div class="f"><label for="ld">Minutes</label><input id="ld" name="duration" type="number" min="15" max="180" step="5" value="60" required></div>' +
+      '<div class="f"><label for="ld">Minutes</label><input id="ld" name="duration" type="number" min="15" max="180" step="5" value="' + progMins(ap ? ap.program : s.program) + '" required></div>' +
       '<div class="f"><label for="lp">Package</label><select id="lp" name="package_id">' + opts.replace('value="' + (ap ? ap.id : "") + '"', 'value="' + (ap ? ap.id : "") + '" selected') + "</select></div>" +
       '<div class="f"><label for="lto">Topic</label><input id="lto" name="topic"></div></div>' +
       '<p class="hint">Egypt time. Students can switch the lessons to their own time zone.</p><div class="acts"><button class="btn sec" type="submit">Schedule lesson</button></div></form></div>';
@@ -945,9 +948,16 @@
     out.push("*CLEAR English Academy*");
     out.push(ar ? "*قائمة " + (many ? "الأسعار" : "أسعار " + PRICES[keys[0]].ar) + "*" : "*" + (many ? "Price list" : PRICES[keys[0]].name + ": price list") + "*");
     out.push("");
-    out.push(ar
-      ? "كل مستوى 8 حصص، مدة الحصة ساعة، أونلاين فردي (واحد لواحد). ويشمل اختبار تحديد المستوى، وتقرير المستوى مع الخطة، والوصول لمواد الحصص ومواد المذاكرة الذاتية."
-      : "Each level is 8 one-hour lessons, one to one online. It includes a placement test, a level report and plan, access to your lesson materials and self-study resources.");
+    var two = progMins(keys[0]) === 120;
+    if (many) {
+      out.push(ar
+        ? "كل مستوى 8 حصص أونلاين فردي (واحد لواحد): مدة الحصة ساعة، وساعتان في الآيلتس. ويشمل اختبار تحديد المستوى، وتقرير المستوى مع الخطة، والوصول لمواد الحصص ومواد المذاكرة الذاتية."
+        : "Each level is 8 lessons, one to one online: one hour each, and two hours each for IELTS. It includes a placement test, a level report and plan, access to your lesson materials and self-study resources.");
+    } else {
+      out.push(ar
+        ? "كل مستوى 8 حصص، مدة الحصة " + (two ? "ساعتان" : "ساعة") + "، أونلاين فردي (واحد لواحد). ويشمل اختبار تحديد المستوى، وتقرير المستوى مع الخطة، والوصول لمواد الحصص ومواد المذاكرة الذاتية."
+        : "Each level is 8 " + (two ? "two-hour" : "one-hour") + " lessons, one to one online. It includes a placement test, a level report and plan, access to your lesson materials and self-study resources.");
+    }
     out.push("");
     if (many) {
       keys.forEach(function (k) { out.push("*" + (ar ? PRICES[k].ar : PRICES[k].name) + "*"); out.push(programBlock(k, ar, m)); out.push(""); });
@@ -986,7 +996,7 @@
       var rows = [1, 2, 3].map(function (lv) {
         var o = offerFor(k, lv);
         var price = o.extra ? "<s>" + esc(money(o.base)) + "</s> <b>" + esc(money(o.fin)) + "</b>" : "<b>" + esc(money(o.base)) + "</b>";
-        var sub = o.lessons + " lessons" + (o.bundlePct ? ", " + o.bundlePct + "% package discount (list " + money(o.list) + ")" : "");
+        var sub = o.lessons + " lessons" + (progMins(k) === 120 ? " of 2 hours" : "") + (o.bundlePct ? ", " + o.bundlePct + "% package discount (list " + money(o.list) + ")" : "");
         return '<div class="prow"><span>' + (lv === 1 ? "1 level" : lv + " levels") + '<br><span class="sub">' + esc(sub) + '</span></span><span class="pr">' + price +
           '<br><span class="sub">about ' + esc(money(o.extra ? o.egpFin : o.egpBase, "EGP")) + (o.extra ? " · saves " + esc(money(o.extra)) : "") + "</span></span></div>";
       }).join("");
