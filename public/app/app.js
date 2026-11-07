@@ -254,7 +254,8 @@
   function studentName(id) { var s = byId(S.students, id); return s ? s.full_name : "Unknown"; }
   function activePackage(sid) {
     var list = S.packages.filter(function (p) { return p.student_id === sid && (p.status === "active" || p.status === "pending"); });
-    return list.sort(function (a, b) { return a.created_at < b.created_at ? 1 : -1; })[0] || null;
+    /* the package in use comes first (active), then the newest one waiting to start */
+    return list.sort(function (a, b) { return (a.status === "active" ? 0 : 1) - (b.status === "active" ? 0 : 1) || (a.created_at < b.created_at ? 1 : -1); })[0] || null;
   }
   function pkgLabel(p) { return (PRICES[p.program] || PRICES.general).name + ", " + p.levels + (p.levels === 1 ? " level" : " levels") + " (" + p.lessons_total + " lessons)"; }
 
@@ -447,8 +448,9 @@
       '<select id="flt" aria-label="Filter by status"><option value="all">All statuses</option>' + opt(Object.keys(STATUS), UI.filter, STATUS) + "</select>" +
       '<button type="button" class="btn sm" data-act="addtoggle">' + (UI.add ? "Close" : "Add student") + "</button></div>" + addBox + '<div class="list" id="list">' + studentRows() + "</div></div>";
     var s = id ? byId(S.students, id) : null;
+    if (!s) UI.psid = null;
     var right = '<div class="panelcol">' + (s ? studentPanel(s) : '<div class="empty"><b>Select a student</b>Their profile, packages, payments, lessons and reports open here.</div>') + "</div>";
-    return sum + '<div class="main' + (s ? " detail" : "") + '">' + left + right + "</div>";
+    return (s ? "" : sum) + '<div class="main' + (s ? " detail" : "") + '">' + left + right + "</div>";
   }
   function addStudentForm() {
     return '<form class="addbox" data-form="addstudent"><div class="fields">' +
@@ -462,14 +464,111 @@
   }
   function mapNames() { var o = {}; Object.keys(PRICES).forEach(function (k) { o[k] = PRICES[k].name; }); return o; }
 
+  /* ---- student profile: header, key facts and tabs */
+  var PTABS = [["overview", "Overview"], ["lessons", "Lessons"], ["billing", "Packages and payments"], ["files", "Materials"], ["reports", "Reports and homework"], ["notes", "Notes"], ["details", "Details"]];
+  function initials(n) { var p = String(n || "").trim().split(/\s+/); return ((p[0] || "?").charAt(0) + (p.length > 1 ? p[p.length - 1].charAt(0) : "")).toUpperCase(); }
+  function isOpen(key, dflt) { return UI.fold && UI.fold[key] != null ? UI.fold[key] : !!dflt; }
+  /* a block that opens and closes, so the page shows what you need and hides the forms until you want them */
+  function foldBox(key, title, body, dflt) {
+    var open = isOpen(key, dflt);
+    return '<div class="fold"><button type="button" class="fold-h" data-act="fold" data-v="' + key + '" aria-expanded="' + open + '"><span>' + title + '</span><i aria-hidden="true">' + (open ? "&minus;" : "+") + "</i></button>" + (open ? '<div class="fold-b">' + body + "</div>" : "") + "</div>";
+  }
+  function safeUrl(u) { return /^https?:\/\//i.test(u || "") ? u : ""; }
+  function profileData(s) {
+    var nowIso = new Date().toISOString();
+    var d = { nowIso: nowIso };
+    d.pkgs = S.packages.filter(function (p) { return p.student_id === s.id; });
+    d.pays = S.payments.filter(function (p) { return p.student_id === s.id; });
+    d.les = S.lessons.filter(function (l) { return l.student_id === s.id; });
+    d.reps = S.reports.filter(function (r) { return r.student_id === s.id; });
+    d.mats = S.materials.filter(function (m) { return m.student_id === s.id; });
+    d.ap = activePackage(s.id);
+    d.used = d.ap ? pkgUsed(d.ap) : 0; d.tot = d.ap ? d.ap.lessons_total : 0;
+    d.upcoming = d.les.filter(function (l) { return l.status === "scheduled" && l.starts_at >= nowIso; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
+    d.toMark = d.les.filter(function (l) { return l.status === "scheduled" && l.starts_at < nowIso; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
+    d.past = d.les.filter(function (l) { return l.status !== "scheduled"; }).sort(function (a, b) { return a.starts_at < b.starts_at ? 1 : -1; });
+    d.unpaid = d.pkgs.filter(function (p) { return (p.status === "pending" || p.status === "active") && !pkgIsPaid(p); });
+    d.owed = d.unpaid.reduce(function (a, p) { return a + pkgRemaining(p, "USD"); }, 0);
+    d.hw = S.academicReady ? S.assignments.filter(function (a) { return a.student_id === s.id; }) : [];
+    d.hwReview = d.hw.filter(function (a) { return a.status === "submitted"; });
+    d.cps = S.academicReady ? checkpointItems().filter(function (x) { return x.s.id === s.id && x.due; }) : [];
+    return d;
+  }
+  function profileHeader(s, d) {
+    var tz = (countryByName(s.country) || [])[2];
+    var meta = [(PRICES[s.program] || {}).name || "No program yet", s.cefr ? "Level " + s.cefr : "Level not tested yet", s.country || null].filter(Boolean).map(esc).join(" &middot; ");
+    var there = tz && tz !== EG ? " &middot; " + esc(clock(Date.now(), tz)) + " there now" : "";
+    var wa = s.phone ? '<a class="btn sec sm" href="' + esc(waLink(s.phone)) + '" target="_blank" rel="noopener">WhatsApp</a>' : "";
+    var em = s.email ? '<a class="btn sec sm" href="mailto:' + esc(s.email) + '">Email</a>' : "";
+    return '<div class="phead"><div class="pav" aria-hidden="true">' + esc(initials(s.full_name)) + '</div><div class="pid"><h2>' + esc(s.full_name) + '</h2><div class="pills" style="margin-top:8px">' + statusPill(s.status) +
+      (s.user_id ? '<span class="pill ok">Has signed in</span>' : '<span class="pill">Not signed in yet</span>') + '</div><p class="pmeta">' + meta + there + "</p></div>" +
+      '<div class="pact noprint">' + wa + em + '<button type="button" class="btn sec sm" data-act="ptab" data-v="details">Edit details</button></div></div>';
+  }
+  function profileFacts(s, d) {
+    var tz = (countryByName(s.country) || [])[2], nx = d.upcoming[0];
+    var left = d.ap ? Math.max(0, d.tot - d.used) : 0;
+    var tile = function (label, big, small, warn) { return '<div><span class="label">' + label + "</span><b" + (warn ? ' style="color:var(--warn)"' : "") + ">" + big + "</b>" + (small ? "<small>" + small + "</small>" : "") + "</div>"; };
+    return '<div class="pfacts">' +
+      tile("Lessons", d.ap ? d.used + " of " + d.tot + " used" : "No package yet", d.ap ? left + (left === 1 ? " lesson left" : " lessons left") : "Create one in Packages and payments") +
+      tile("Next lesson", nx ? esc(fmtDT(nx.starts_at)) : "None scheduled", nx ? "Egypt time" + (tz && tz !== EG ? " &middot; " + esc(fmtDT(nx.starts_at, tz)) + " in " + esc(s.country) : "") : (d.ap ? "Build the weekly schedule in Lessons" : ""), !nx && !!d.ap) +
+      tile("Payment", d.owed > 0 ? esc(money(Math.round(d.owed * 100) / 100)) + " due" : (d.pkgs.length ? "Paid" : "&mdash;"), d.owed > 0 ? esc(pkgLabel(d.unpaid[0])) : (d.ap ? esc(pkgLabel(d.ap)) : ""), d.owed > 0) +
+      tile("Package valid until", d.ap && d.ap.expires_on ? esc(prettyDate(d.ap.expires_on)) : (d.ap ? "Starts at first lesson" : "&mdash;"), d.ap && d.ap.pause_until ? "Paused until " + esc(d.ap.pause_until) : (d.ap ? "10 weeks from the first lesson" : "")) + "</div>";
+  }
+  function profileTabs(d, cur) {
+    var n = { lessons: d.upcoming.length, files: d.mats.length, reports: d.reps.length };
+    var flag = { lessons: d.toMark.length > 0, billing: d.owed > 0, reports: d.hwReview.length > 0 || d.cps.length > 0 };
+    return '<div class="ptabs noprint" role="group" aria-label="Student sections">' + PTABS.map(function (t) {
+      var k = t[0] === "reports" ? "reports" : t[0], c = n[k];
+      return '<button type="button" data-act="ptab" data-v="' + t[0] + '" aria-pressed="' + (cur === t[0]) + '">' + t[1] + (c ? ' <span class="cnt">' + c + "</span>" : "") + (flag[t[0]] ? ' <span class="dot" title="Needs attention"></span>' : "") + "</button>";
+    }).join("") + "</div>";
+  }
+  function miniLesson(l) {
+    var u = safeUrl(l.meeting_url) || safeUrl(S.settings && S.settings.default_meeting_url);
+    return '<div class="mini"><span><b>' + esc(fmtDT(l.starts_at)) + '</b><br><span class="sub">' + esc(l.topic || "No topic yet") + " &middot; " + l.duration_min + ' min</span></span>' + (u ? '<a class="btn sec sm" href="' + esc(u) + '" target="_blank" rel="noopener">Open link</a>' : "") + "</div>";
+  }
+  function overviewTab(s, d) {
+    var items = [], go = function (tab, label) { return '<button type="button" class="btn sm" data-act="ptab" data-v="' + tab + '">' + label + "</button>"; };
+    if (d.toMark.length) items.push([d.toMark.length + (d.toMark.length === 1 ? " lesson has passed and still needs" : " lessons have passed and still need") + " marking", go("lessons", "Mark them")]);
+    if (d.owed > 0) items.push([esc(money(Math.round(d.owed * 100) / 100)) + " is due on " + esc(pkgLabel(d.unpaid[0])), go("billing", "Record payment")]);
+    if (!d.pkgs.length) items.push(["No package yet", go("billing", "Create a package")]);
+    else if (d.ap && !d.upcoming.length && d.used < d.tot) items.push(["No upcoming lessons are scheduled", go("lessons", "Schedule lessons")]);
+    d.cps.forEach(function (x) { items.push(["Feedback report due: " + esc(CHECKPOINTS[x.cp]), '<button type="button" class="btn sm" data-act="newcp" data-id="' + s.id + '" data-v="' + x.cp + '">Write it</button>']); });
+    if (d.hwReview.length) items.push([d.hwReview.length + (d.hwReview.length === 1 ? " homework is" : " homeworks are") + " waiting for your feedback", go("reports", "Review")]);
+    var todo = '<div class="sec"><h3>Needs your attention</h3>' + (items.length ? '<div class="cards">' + items.map(function (i) { return '<div class="card todo"><span>' + i[0] + "</span>" + i[1] + "</div>"; }).join("") + "</div>" : '<p class="hint">Nothing needs attention right now.</p>') + "</div>";
+    var up = d.upcoming.slice(0, 3).map(miniLesson).join("");
+    var rec = d.past.slice(0, 3).map(function (l) {
+      var cls = l.status === "completed" ? " ok" : (l.status === "no_show" || l.status === "late_cancel") ? " warn" : "";
+      return '<div class="mini"><span><b>' + esc(fmtDT(l.starts_at)) + '</b><br><span class="sub">' + esc(l.topic || "No topic recorded") + '</span></span><span class="pill' + cls + '">' + esc(LSTATUS[l.status] || l.status) + "</span></div>";
+    }).join("");
+    var lessonsBox = '<div class="pcols"><div class="sec"><h3>Upcoming lessons</h3>' + (up || '<p class="hint">Nothing scheduled.</p>') + (d.upcoming.length > 3 ? '<button type="button" class="linkbtn" data-act="ptab" data-v="lessons">See all ' + d.upcoming.length + " lessons</button>" : "") + "</div>" +
+      '<div class="sec"><h3>Recent lessons</h3>' + (rec || '<p class="hint">No lessons delivered yet.</p>') + (d.past.length > 3 ? '<button type="button" class="linkbtn" data-act="ptab" data-v="lessons">See all</button>' : "") + "</div></div>";
+    var pk = "";
+    if (d.ap) {
+      var paid = pkgIsPaid(d.ap), pct = Math.min(100, Math.round(d.used / (d.tot || 1) * 100));
+      pk = '<div class="sec"><h3>Current package</h3><div class="card"><div class="l1"><span class="t">' + esc(pkgLabel(d.ap)) + '</span><span class="pills"><span class="pill ' + (paid ? "ok" : "warn") + '">' + (paid ? "Paid" : "Payment due") + '</span></span></div><span class="bar" aria-hidden="true"><i style="width:' + pct + '%"></i></span><span class="hint">' + d.used + " of " + d.tot + " lessons used &middot; " + money(d.ap.price_usd) + (d.ap.expires_on ? " &middot; valid until " + esc(prettyDate(d.ap.expires_on)) : "") + "</span></div></div>";
+    }
+    var note = (S.notes[s.id] || "").trim();
+    var about = '<div class="sec"><h3>Goal and notes</h3><div class="card"><span class="label">Goal</span><p style="margin:0">' + (s.goal ? esc(s.goal) : '<span class="hint">No goal written yet.</span>') + '</p><span class="label">Your private note</span><p style="margin:0">' + (note ? esc(note.length > 240 ? note.slice(0, 240) + "…" : note) : '<span class="hint">No note yet.</span>') + '</p><div class="acts"><button type="button" class="btn sec sm" data-act="ptab" data-v="notes">Open notes</button><button type="button" class="btn sec sm" data-act="ptab" data-v="details">Edit goal</button></div></div></div>';
+    return todo + lessonsBox + pk + about;
+  }
   function studentPanel(s) {
-    var pkgs = S.packages.filter(function (p) { return p.student_id === s.id; });
-    var pays = S.payments.filter(function (p) { return p.student_id === s.id; });
-    var les = S.lessons.filter(function (l) { return l.student_id === s.id; });
-    var reps = S.reports.filter(function (r) { return r.student_id === s.id; });
-    return '<div class="panel"><div class="acts noprint"><button type="button" class="btn sec sm back" data-act="back">Back to students</button></div>' +
-      "<div><h2>" + esc(s.full_name) + '</h2><div class="pills" style="margin-top:8px">' + statusPill(s.status) + (s.user_id ? '<span class="pill ok">Has signed in</span>' : '<span class="pill">Not signed in yet</span>') + "</div></div>" +
-      detailsSection(s) + packagesSection(s, pkgs, pays) + lessonsSection(s, pkgs, les) + materialsSection(s, les) + checkpointStrip(s) + reportsSection(s, reps) + notesSection(s) + dangerSection(s) + "</div>";
+    if (UI.psid !== s.id) { UI.psid = s.id; UI.ptab = "overview"; UI.fold = {}; }
+    var d = profileData(s), tab = UI.ptab || "overview", body;
+    if (tab === "lessons") body = lessonsSection(s, d.pkgs, d.les);
+    else if (tab === "billing") body = packagesSection(s, d.pkgs, d.pays);
+    else if (tab === "files") body = materialsSection(s, d.les);
+    else if (tab === "reports") body = checkpointStrip(s) + reportsSection(s, d.reps) + homeworkSection(s, d);
+    else if (tab === "notes") body = notesSection(s);
+    else if (tab === "details") body = detailsSection(s) + dangerSection(s);
+    else body = overviewTab(s, d);
+    return '<div class="panel"><div class="acts noprint"><button type="button" class="btn sec sm back" data-act="back">&larr; All students</button></div>' +
+      profileHeader(s, d) + profileFacts(s, d) + profileTabs(d, tab) + '<div class="ptab-body">' + body + "</div></div>";
+  }
+  function homeworkSection(s, d) {
+    if (!S.academicReady) return "";
+    var form = '<form data-form="newhw" class="addbox"><input type="hidden" name="student_id" value="' + s.id + '"><div class="fields"><div class="f"><label for="nh2">Title</label><input id="nh2" name="title" required></div><div class="f"><label for="nh3">Due date</label><input id="nh3" name="due_on" type="date"></div>' +
+      '<div class="f wide"><label for="nh4">Instructions</label><textarea id="nh4" name="instructions"></textarea></div></div><div class="acts"><button class="btn" type="submit">Assign</button></div></form>';
+    return '<div class="sec"><h3>Homework</h3><div class="cards">' + (d.hw.map(hwCard).join("") || '<p class="hint">No homework yet.</p>') + "</div>" + foldBox("hw", "Assign homework", form, false) + "</div>";
   }
   function detailsSection(s) {
     return '<div class="sec"><h3>Details</h3><form data-form="savestudent" data-id="' + s.id + '"><div class="fields">' +
@@ -487,29 +586,33 @@
   function packagesSection(s, pkgs, pays) {
     var cards = pkgs.map(function (p) {
       var used = pkgUsed(p), paid = pkgIsPaid(p), pp = pays.filter(function (x) { return x.package_id === p.id; });
-      var rem = pkgRemaining(p, "USD");
-      return '<div class="card"><div class="l1"><span class="t">' + esc(pkgLabel(p)) + '</span><span class="pills"><span class="pill ' + (paid ? "ok" : "warn") + '">' + (paid ? "Paid" : "Payment due") + '</span><span class="pill">' + esc(p.status) + "</span></span></div>" +
+      var rem = pkgRemaining(p, "USD"), pct = Math.min(100, Math.round(used / (p.lessons_total || 1) * 100));
+      var payForm = '<form data-form="addpay" data-id="' + p.id + '" class="addbox"><div class="fields">' +
+        '<div class="f"><label for="pa' + p.id + '">Amount received</label><input id="pa' + p.id + '" name="amount" type="number" step="0.01" min="0.01" required value="' + rem + '"></div>' +
+        '<div class="f"><label for="pc' + p.id + '">Currency</label><select id="pc' + p.id + '" name="currency" data-change="paycur" data-id="' + p.id + '"><option>USD</option><option>EGP</option></select></div>' +
+        '<div class="f" data-rate="1"><label for="px' + p.id + '">EGP per $1 used for this payment (kept on the record)</label><input id="px' + p.id + '" name="egp_rate" type="number" step="0.0001" min="1" value="' + esc(S.settings ? S.settings.usd_egp_rate : "") + '"></div>' +
+        '<div class="f"><label for="pm' + p.id + '">Method</label><select id="pm' + p.id + '" name="method">' + opt(METHODS, "InstaPay") + "</select></div>" +
+        '<div class="f"><label for="pr' + p.id + '">Reference</label><input id="pr' + p.id + '" name="reference" placeholder="Transfer ID or last digits"></div>' +
+        '<div class="f"><label for="pd' + p.id + '">Date received</label><input id="pd' + p.id + '" name="paid_on" type="date" value="' + todayStr() + '" required></div></div>' +
+        '<p class="hint" data-eq>' + payEqText(rem, "USD", liveRate()) + '</p><div class="acts"><button class="btn" type="submit">Record payment and create receipt</button></div></form>';
+      return '<div class="card pk"><div class="l1"><span class="t">' + esc(pkgLabel(p)) + '</span><span class="pills"><span class="pill ' + (paid ? "ok" : "warn") + '">' + (paid ? "Paid" : "Payment due") + '</span><span class="pill">' + esc(p.status) + "</span></span></div>" +
+        '<span class="bar" aria-hidden="true"><i style="width:' + pct + '%"></i></span>' +
         '<span class="hint">' + money(p.price_usd) + (Number(p.discount_pct) ? " after " + Number(p.discount_pct) + "% discount (list " + money(p.list_price_usd) + ")" : "") + " · " + used + " of " + p.lessons_total + " lessons used" +
-        (p.expires_on ? " · valid until " + esc(p.expires_on) : " · the 10 weeks start at the first lesson") + (p.pause_until ? " · paused until " + esc(p.pause_until) : "") + "</span>" +
+        (p.expires_on ? " · valid until " + esc(p.expires_on) : " · the 10 weeks start at the first lesson") + (p.pause_until ? " · paused until " + esc(p.pause_until) : "") + (paid ? "" : " · " + money(rem) + " still due") + "</span>" +
+        (pp.length ? '<span class="label">Payments received</span>' : "") +
         pp.map(function (x) {
           return '<div class="card"><div class="l1"><span><b>' + money(x.amount, x.currency) + "</b>" + (x.currency === "USD" && egpOf(x) ? " <span class=\"hint\">(about " + money(egpOf(x), "EGP") + ")</span>" : "") + " · " + esc(x.method) + " · " + esc(x.paid_on) + '</span><span class="pills"><span class="pill ok">' + esc(x.receipt_no) + '</span><button type="button" class="btn sec sm" data-act="openreceipt" data-id="' + x.id + '">Open receipt</button></span></div></div>';
         }).join("") +
-        (paid ? "" : '<form data-form="addpay" data-id="' + p.id + '" class="addbox"><div class="fields">' +
-          '<div class="f"><label for="pa' + p.id + '">Amount received</label><input id="pa' + p.id + '" name="amount" type="number" step="0.01" min="0.01" required value="' + rem + '"></div>' +
-          '<div class="f"><label for="pc' + p.id + '">Currency</label><select id="pc' + p.id + '" name="currency" data-change="paycur" data-id="' + p.id + '"><option>USD</option><option>EGP</option></select></div>' +
-          '<div class="f" data-rate="1"><label for="px' + p.id + '">EGP per $1 used for this payment (kept on the record)</label><input id="px' + p.id + '" name="egp_rate" type="number" step="0.0001" min="1" value="' + esc(S.settings ? S.settings.usd_egp_rate : "") + '"></div>' +
-          '<div class="f"><label for="pm' + p.id + '">Method</label><select id="pm' + p.id + '" name="method">' + opt(METHODS, "InstaPay") + "</select></div>" +
-          '<div class="f"><label for="pr' + p.id + '">Reference</label><input id="pr' + p.id + '" name="reference" placeholder="Transfer ID or last digits"></div>' +
-          '<div class="f"><label for="pd' + p.id + '">Date received</label><input id="pd' + p.id + '" name="paid_on" type="date" value="' + todayStr() + '" required></div></div>' +
-          '<p class="hint" data-eq>' + payEqText(rem, "USD", liveRate()) + '</p><div class="acts"><button class="btn" type="submit">Record payment and create receipt</button></div></form>') +
+        (paid ? "" : foldBox("pay" + p.id, "Record a payment", payForm, true)) +
         '<div class="acts"><button type="button" class="btn danger sm" data-act="delpkg" data-id="' + p.id + '">Delete package</button></div></div>';
     }).join("");
     var prog = s.program || "general";
-    return '<div class="sec"><h3>Packages and payments</h3><div class="cards">' + (cards || '<p class="hint">No package yet. Create one when the student chooses a program.</p>') + "</div>" +
-      '<form data-form="addpkg" data-id="' + s.id + '" class="addbox"><div class="fields">' +
+    var newForm = '<form data-form="addpkg" data-id="' + s.id + '" class="addbox"><div class="fields">' +
       '<div class="f"><label for="kp">Program</label><select id="kp" name="program" data-change="pkgprev">' + opt(Object.keys(PRICES), prog, mapNames()) + "</select></div>" +
       '<div class="f"><label for="kl">Levels</label><select id="kl" name="levels" data-change="pkgprev"><option value="1">1 level (8 lessons)</option><option value="2">2 levels (16 lessons), 8% off</option><option value="3">3 levels (24 lessons), 12% off</option></select></div></div>' +
-      '<p class="hint" id="pkgprev">' + pkgPreview(prog, 1) + '</p><div class="acts"><button class="btn sec" type="submit">Create package</button></div></form></div>';
+      '<p class="hint" id="pkgprev">' + pkgPreview(prog, 1) + '</p><div class="acts"><button class="btn sec" type="submit">Create package</button></div></form>';
+    return '<div class="sec"><h3>Packages and payments</h3><div class="cards">' + (cards || '<p class="hint">No package yet. Create one when the student chooses a program.</p>') + "</div>" +
+      foldBox("newpkg", "New package", newForm, !pkgs.length) + "</div>";
   }
   function pkgPreview(prog, levels) {
     var p = priceFor(prog, levels);
@@ -685,7 +788,7 @@
   }
   function scheduleSection(s) {
     var info = schedFor(s);
-    if (!info) return '<div class="sec"><h3>Weekly schedule</h3><p class="hint">Create a package first. Then pick the weekly days here and the lessons are built for you.</p></div>';
+    if (!info) return '<p class="hint">Create a package first (Packages and payments). Then pick the weekly days here and the lessons are built for you.</p>';
     var st = info.st;
     var rows = st.rows.map(function (r, i) {
       return '<div class="srow"><div class="f"><label for="sd' + i + '">Day</label><select id="sd' + i + '" name="dow_' + i + '">' + DOWS.map(function (d) { return '<option value="' + d[0] + '"' + (d[0] === r.dow ? " selected" : "") + ">" + d[1] + "</option>"; }).join("") + "</select></div>" +
@@ -694,11 +797,11 @@
         '<button type="button" class="btn danger sm" data-act="delday" data-i="' + i + '" aria-label="Remove this day">Remove</button></div>';
     }).join("");
     var pkgSel = info.pkgs.length > 1 ? '<div class="f"><label for="spk">Package</label><select id="spk" name="pkg" data-change="schedpkg" data-id="' + s.id + '">' + info.pkgs.map(function (p) { return '<option value="' + p.id + '"' + (p.id === st.pkgId ? " selected" : "") + ">" + esc(pkgLabel(p)) + (pkgIsPaid(p) ? " · paid" : " · payment due") + "</option>"; }).join("") + "</select></div>" : "";
-    return '<div class="sec"><h3>Weekly schedule</h3><form data-form="schedule" data-id="' + s.id + '" class="addbox">' + pkgSel +
+    return '<form data-form="schedule" data-id="' + s.id + '" class="addbox">' + pkgSel +
       '<div class="srows">' + rows + '</div><div class="acts"><button type="button" class="btn sec sm" data-act="addday">Add another day</button></div>' +
       '<div class="fields"><div class="f"><label for="sst">First lesson on or after</label><input id="sst" name="start" type="date" value="' + esc(st.start) + '" required></div></div>' +
       '<p class="hint">All times are Egypt time. Students see them in Egypt time and can convert them to their own.</p>' +
-      '<div id="schedprev" aria-live="polite">' + schedPreview(st) + '</div><div class="acts"><button class="btn" type="submit">Create the lessons</button></div></form></div>';
+      '<div id="schedprev" aria-live="polite">' + schedPreview(st) + '</div><div class="acts"><button class="btn" type="submit">Create the lessons</button></div></form>';
   }
   function submitSchedule(form, done) {
     var st = UI.sched = readSched(form), pkg = byId(S.packages, st.pkgId);
@@ -712,7 +815,7 @@
     var go = function (replace) {
       return act(sb.from("packages").update({ schedule: rows, schedule_tz: EG }).eq("id", pkg.id), null).then(function () {
         return act(sb.rpc("generate_lessons", { p_package: pkg.id, p_start: st.start, p_replace: replace }), null);
-      }).then(function (made) { toast(made + " lessons scheduled."); return refresh(); });
+      }).then(function (made) { toast(made + " lessons scheduled."); if (UI.fold) delete UI.fold.sched; return refresh(); });
     };
     (c.upcoming ? ask("This package already has " + c.upcoming + " upcoming lessons. Replace them with this schedule?", "Replace them") : Promise.resolve(true)).then(function (ok) {
       return ok ? go(c.upcoming > 0) : null;
@@ -720,29 +823,38 @@
   }
 
   /* ---- lessons */
+  function lessonRow(l, nowIso) {
+    var open = isOpen("l" + l.id, false), passed = l.status === "scheduled" && l.starts_at < nowIso;
+    var cls = l.status === "completed" ? " ok" : (l.status === "no_show" || l.status === "late_cancel") ? " warn" : "";
+    var nf = S.materials.filter(function (m) { return m.lesson_id === l.id; }).length;
+    var head = '<div class="lr-h"><button type="button" class="lr-t" data-act="fold" data-v="l' + l.id + '" aria-expanded="' + open + '"><b>' + esc(fmtDT(l.starts_at)) + '</b><span class="sub">' + esc(l.topic || "No topic yet") + " · " + l.duration_min + " min &middot; " + (open ? "close" : "edit") + '</span></button><span class="pills">' +
+      (passed ? '<span class="pill warn">Needs marking</span>' : '<span class="pill' + cls + '">' + esc(LSTATUS[l.status] || l.status) + "</span>") + (nf ? '<span class="pill">' + nf + (nf === 1 ? " file" : " files") + "</span>" : "") + "</span></div>";
+    var mark = passed ? '<div class="acts"><button type="button" class="btn sm" data-act="lmark" data-id="' + l.id + '" data-v="completed">Mark completed</button><button type="button" class="btn sec sm" data-act="lmark" data-id="' + l.id + '" data-v="no_show">No-show</button><button type="button" class="btn sec sm" data-act="lmark" data-id="' + l.id + '" data-v="moved">Moved</button></div>' : "";
+    var body = open ? '<div class="lr-b"><div class="f" style="max-width:260px"><label for="ls_' + l.id + '">Status</label><select id="ls_' + l.id + '" data-change="lstatus" data-id="' + l.id + '">' + opt(Object.keys(LSTATUS), l.status, LSTATUS) + "</select></div>" + lessonFiles(l) +
+      '<form data-form="savelesson" data-id="' + l.id + '"><div class="fields"><div class="f"><label for="lt' + l.id + '">Topic</label><input id="lt' + l.id + '" name="topic" value="' + esc(l.topic) + '"></div>' +
+      '<div class="f"><label for="lm' + l.id + '">Meeting link</label><input id="lm' + l.id + '" name="meeting_url" type="url" value="' + esc(l.meeting_url) + '"></div>' +
+      '<div class="f wide"><label for="lsu' + l.id + '">Note the student will see</label><textarea id="lsu' + l.id + '" name="summary">' + esc(l.summary) + "</textarea></div></div>" +
+      '<div class="acts" style="margin-top:8px"><button class="btn sec sm" type="submit">Save</button><button type="button" class="btn danger sm" data-act="dellesson" data-id="' + l.id + '">Delete lesson</button></div></form></div>' : "";
+    return '<div class="lr' + (passed ? " due" : "") + '">' + head + mark + body + "</div>";
+  }
   function lessonsSection(s, pkgs, les) {
-    var nowIso = new Date().toISOString();
-    var rows = les.slice().sort(function (a, b) {
-      var ua = a.status === "scheduled" && a.starts_at >= nowIso, ub = b.status === "scheduled" && b.starts_at >= nowIso;
-      if (ua !== ub) return ua ? -1 : 1;
-      return ua ? (a.starts_at < b.starts_at ? -1 : 1) : (a.starts_at < b.starts_at ? 1 : -1);
-    }).map(function (l) {
-      return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " · " + l.duration_min + ' min</span><select data-change="lstatus" data-id="' + l.id + '" aria-label="Lesson status" style="width:auto">' + opt(Object.keys(LSTATUS), l.status, LSTATUS) + "</select></div>" + (l.status === "scheduled" && l.starts_at < nowIso ? '<div class="acts"><span class="hint">This lesson has passed.</span><button type="button" class="btn sm" data-act="lmark" data-id="' + l.id + '" data-v="completed">Mark completed</button><button type="button" class="btn sec sm" data-act="lmark" data-id="' + l.id + '" data-v="no_show">No-show</button><button type="button" class="btn sec sm" data-act="lmark" data-id="' + l.id + '" data-v="moved">Moved</button></div>' : "") + lessonFiles(l) +
-        '<form data-form="savelesson" data-id="' + l.id + '"><div class="fields"><div class="f"><label for="lt' + l.id + '">Topic</label><input id="lt' + l.id + '" name="topic" value="' + esc(l.topic) + '"></div>' +
-        '<div class="f"><label for="lm' + l.id + '">Meeting link</label><input id="lm' + l.id + '" name="meeting_url" type="url" value="' + esc(l.meeting_url) + '"></div>' +
-        '<div class="f wide"><label for="ls' + l.id + '">Note the student will see</label><textarea id="ls' + l.id + '" name="summary">' + esc(l.summary) + "</textarea></div></div>" +
-        '<div class="acts" style="margin-top:8px"><button class="btn sec sm" type="submit">Save</button><button type="button" class="btn danger sm" data-act="dellesson" data-id="' + l.id + '">Delete</button></div></form></div>';
-    }).join("");
+    var d = profileData(s), nowIso = d.nowIso;
+    var group = function (title, list, none) { return '<div class="sec"><h3>' + title + (list.length ? " (" + list.length + ")" : "") + '</h3><div class="cards">' + (list.map(function (l) { return lessonRow(l, nowIso); }).join("") || '<p class="hint">' + none + "</p>") + "</div></div>"; };
+    var allPast = isOpen("allpast", false), pastShown = allPast ? d.past : d.past.slice(0, 6);
+    var pastBlock = '<div class="sec"><h3>Past lessons' + (d.past.length ? " (" + d.past.length + ")" : "") + '</h3><div class="cards">' + (pastShown.map(function (l) { return lessonRow(l, nowIso); }).join("") || '<p class="hint">No lessons delivered yet.</p>') + "</div>" +
+      (d.past.length > 6 ? '<button type="button" class="linkbtn" data-act="fold" data-v="allpast" aria-expanded="' + allPast + '">' + (allPast ? "Show fewer" : "Show all " + d.past.length) + "</button>" : "") + "</div>";
     var start = new Date(); start.setMinutes(0, 0, 0); start.setHours(start.getHours() + 24);
     var opts = '<option value="">No package</option>' + pkgs.map(function (p) { return '<option value="' + p.id + '">' + esc(pkgLabel(p)) + "</option>"; }).join("");
     var ap = activePackage(s.id);
-    return scheduleSection(s) + '<div class="sec"><h3>Lessons</h3><div class="cards">' + (rows || '<p class="hint">No lessons scheduled yet.</p>') + "</div>" +
-      '<p class="label">Add a single lesson (a make-up or an extra)</p><form data-form="addlesson" data-id="' + s.id + '" class="addbox"><div class="fields">' +
+    var addForm = '<form data-form="addlesson" data-id="' + s.id + '" class="addbox"><div class="fields">' +
       '<div class="f"><label for="lw">Date and time</label><input id="lw" name="when" type="datetime-local" required value="' + localInputValue(start) + '"></div>' +
       '<div class="f"><label for="ld">Minutes</label><input id="ld" name="duration" type="number" min="15" max="180" step="5" value="' + progMins(ap ? ap.program : s.program) + '" required></div>' +
       '<div class="f"><label for="lp">Package</label><select id="lp" name="package_id">' + opts.replace('value="' + (ap ? ap.id : "") + '"', 'value="' + (ap ? ap.id : "") + '" selected') + "</select></div>" +
       '<div class="f"><label for="lto">Topic</label><input id="lto" name="topic"></div></div>' +
-      '<p class="hint">Egypt time. Students can switch the lessons to their own time zone.</p><div class="acts"><button class="btn sec" type="submit">Schedule lesson</button></div></form></div>';
+      '<p class="hint">Egypt time. Students can switch the lessons to their own time zone.</p><div class="acts"><button class="btn sec" type="submit">Schedule lesson</button></div></form>';
+    return (d.toMark.length ? group("Needs marking", d.toMark, "") : "") + group("Upcoming lessons", d.upcoming, "Nothing scheduled yet.") + pastBlock +
+      '<div class="sec"><h3>Plan more lessons</h3><div class="cards">' + foldBox("sched", "Weekly schedule: build the lessons from fixed days", scheduleSection(s), !d.les.length) +
+      foldBox("addles", "Add a single lesson (a make-up or an extra)", addForm, false) + "</div></div>";
   }
 
   /* ---- materials: files from your device, opened by the student */
@@ -769,14 +881,14 @@
     var lopts = '<option value="">Not tied to one lesson</option>' + up.concat(past).map(function (l, i) {
       return '<option value="' + l.id + '"' + (i === 0 && up.length ? " selected" : "") + ">" + esc(fmtDT(l.starts_at)) + "</option>";
     }).join("");
-    return '<div class="sec"><h3>Materials</h3><div class="cards">' + (mine.map(function (m) { return materialRow(m, true); }).join("") || '<p class="hint">No files yet. Upload slides or a handout and the student can open them from their page.</p>') + "</div>" +
-      '<form data-form="addmaterial" data-id="' + s.id + '" class="addbox"><div class="fields">' +
+    var upForm = '<form data-form="addmaterial" data-id="' + s.id + '" class="addbox"><div class="fields">' +
       '<div class="f wide"><label for="mf">File from your device</label><input id="mf" name="file" type="file" accept="' + FILE_ACCEPT + '" required><span class="hint">PowerPoint, PDF, Word, Excel, images, audio or short video. Up to 50 MB.</span></div>' +
       '<div class="f"><label for="mt">Title (optional)</label><input id="mt" name="title" placeholder="Uses the file name"></div>' +
       '<div class="f"><label for="mk">Type</label><select id="mk" name="kind">' + opt(Object.keys(MKINDS), "slides", MKINDS) + "</select></div>" +
       '<div class="f"><label for="ml">For which lesson</label><select id="ml" name="lesson_id">' + lopts + "</select></div>" +
       '<div class="f wide"><label for="mn">Note the student will see (optional)</label><textarea id="mn" name="note"></textarea></div></div>' +
-      '<div class="acts"><button class="btn" type="submit">Upload file</button></div></form></div>';
+      '<div class="acts"><button class="btn" type="submit">Upload file</button></div></form>';
+    return '<div class="sec"><h3>Materials</h3><div class="cards">' + (mine.map(function (m) { return materialRow(m, true); }).join("") || '<p class="hint">No files yet. Upload slides or a handout and the student can open them from their page.</p>') + "</div>" + foldBox("upload", "Upload a file", upForm, !mine.length) + "</div>";
   }
   function uid() { return (window.crypto && crypto.randomUUID) ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10); }
   function uploadMaterial(sid, d, done) {
@@ -818,7 +930,7 @@
     return '<div class="sec"><h3>Private notes</h3><form data-form="savenote" data-id="' + s.id + '"><div class="f"><label for="nb" class="hint">Only you can read this. Students never see it.</label><textarea id="nb" name="body">' + esc(S.notes[s.id] || "") + '</textarea></div><div class="acts" style="margin-top:8px"><button class="btn sec sm" type="submit">Save notes</button></div></form></div>';
   }
   function dangerSection(s) {
-    return '<div class="sec"><button type="button" class="btn danger sm" data-act="delstudent" data-id="' + s.id + '">Delete this student and all their records</button></div>';
+    return '<div class="sec"><h3>Danger zone</h3><p class="hint">Deleting removes the student with every package, payment, lesson and report. This cannot be undone.</p><div class="acts"><button type="button" class="btn danger sm" data-act="delstudent" data-id="' + s.id + '">Delete this student and all their records</button></div></div>';
   }
 
   /* ------------------------------------------------------------ admin: lessons board */
@@ -1975,6 +2087,8 @@
     if (a === "tab") { UI.tab = v; UI.sent = ""; return renderAuth(); }
     if (a === "again") { UI.sent = ""; return renderAuth(); }
     if (a === "paytab") { UI.payTab = v; return render(); }
+    if (a === "ptab") { UI.ptab = v; render(); window.scrollTo(0, 0); return; }
+    if (a === "fold") { UI.fold = UI.fold || {}; UI.fold[v] = b.getAttribute("aria-expanded") !== "true"; var fy = window.scrollY; render(); window.scrollTo(0, fy); return; }
     if (a === "fetchrate") return updateRateNow(b);
     if (a === "copymsg") { var mt = $("#msgtext"); return copyText(mt ? mt.value : ""); }
     if (a === "wamsg") { var mw = $("#msgtext"); if (mw) window.open("https://wa.me/?text=" + encodeURIComponent(mw.value), "_blank", "noopener"); return; }
