@@ -827,7 +827,9 @@
     var open = isOpen("l" + l.id, false), passed = l.status === "scheduled" && l.starts_at < nowIso;
     var cls = l.status === "completed" ? " ok" : (l.status === "no_show" || l.status === "late_cancel") ? " warn" : "";
     var nf = S.materials.filter(function (m) { return m.lesson_id === l.id; }).length;
-    var head = '<div class="lr-h"><button type="button" class="lr-t" data-act="fold" data-v="l' + l.id + '" aria-expanded="' + open + '"><b>' + esc(fmtDT(l.starts_at)) + '</b><span class="sub">' + esc(l.topic || "No topic yet") + " · " + l.duration_min + " min &middot; " + (open ? "close" : "edit") + '</span></button><span class="pills">' +
+    var cl = S.academicReady && l.cur_lesson_id ? byId(S.cur_lessons, l.cur_lesson_id) : null;
+    var plan = S.academicReady ? '<div class="f lr-plan"><label for="lc' + l.id + '">Lesson in the plan (fills the topic)</label><select id="lc' + l.id + '" data-change="lcur" data-id="' + l.id + '">' + curOptions(l.cur_lesson_id) + "</select></div>" : "";
+    var head = '<div class="lr-h"><button type="button" class="lr-t" data-act="fold" data-v="l' + l.id + '" aria-expanded="' + open + '"><b>' + esc(fmtDT(l.starts_at)) + '</b><span class="sub">' + esc(l.topic || (cl ? cl.title : "No topic yet")) + " · " + l.duration_min + " min &middot; " + (open ? "close" : "edit") + '</span></button><span class="pills">' +
       (passed ? '<span class="pill warn">Needs marking</span>' : '<span class="pill' + cls + '">' + esc(LSTATUS[l.status] || l.status) + "</span>") + (nf ? '<span class="pill">' + nf + (nf === 1 ? " file" : " files") + "</span>" : "") + "</span></div>";
     var mark = passed ? '<div class="acts"><button type="button" class="btn sm" data-act="lmark" data-id="' + l.id + '" data-v="completed">Mark completed</button><button type="button" class="btn sec sm" data-act="lmark" data-id="' + l.id + '" data-v="no_show">No-show</button><button type="button" class="btn sec sm" data-act="lmark" data-id="' + l.id + '" data-v="moved">Moved</button></div>' : "";
     var body = open ? '<div class="lr-b"><div class="f" style="max-width:260px"><label for="ls_' + l.id + '">Status</label><select id="ls_' + l.id + '" data-change="lstatus" data-id="' + l.id + '">' + opt(Object.keys(LSTATUS), l.status, LSTATUS) + "</select></div>" + lessonFiles(l) +
@@ -835,7 +837,7 @@
       '<div class="f"><label for="lm' + l.id + '">Meeting link</label><input id="lm' + l.id + '" name="meeting_url" type="url" value="' + esc(l.meeting_url) + '"></div>' +
       '<div class="f wide"><label for="lsu' + l.id + '">Note the student will see</label><textarea id="lsu' + l.id + '" name="summary">' + esc(l.summary) + "</textarea></div></div>" +
       '<div class="acts" style="margin-top:8px"><button class="btn sec sm" type="submit">Save</button><button type="button" class="btn danger sm" data-act="dellesson" data-id="' + l.id + '">Delete lesson</button></div></form></div>' : "";
-    return '<div class="lr' + (passed ? " due" : "") + '">' + head + mark + body + "</div>";
+    return '<div class="lr' + (passed ? " due" : "") + '">' + head + plan + mark + body + "</div>";
   }
   function lessonsSection(s, pkgs, les) {
     var d = profileData(s), nowIso = d.nowIso;
@@ -1983,7 +1985,8 @@
     if (ch === "lcur") {
       var id = t.getAttribute("data-id"), l = byId(S.lessons, id), c = t.value ? byId(S.cur_lessons, t.value) : null;
       var patch = { cur_lesson_id: t.value || null };
-      if (c && l && !l.topic) patch.topic = c.title;
+      var prev = l && l.cur_lesson_id ? byId(S.cur_lessons, l.cur_lesson_id) : null;
+      if (l && (!l.topic || (prev && l.topic === prev.title))) patch.topic = c ? c.title : null;
       act(sb.from("lessons").update(patch).eq("id", id), "Linked.").then(refresh, refresh);
       return true;
     }
