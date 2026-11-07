@@ -1426,7 +1426,7 @@
   /* ---- plan */
   function acPlan() {
     var total = S.cur_lessons.length, ready = S.cur_lessons.filter(function (l) { return l.status === "ready"; }).length;
-    return '<div class="sum" style="margin:0"><div><span class="label">Program</span><b style="font-size:17px">General English A1</b></div><div><span class="label">Levels</span><b>' + S.cur_levels.length + '</b></div><div><span class="label">Lessons ready</span><b>' + ready + " / " + total + "</b></div></div>" +
+    return '<div class="sum" style="margin:0"><div><span class="label">Program</span><b style="font-size:17px">General English A1</b></div><div><span class="label">Levels</span><b>' + S.cur_levels.filter(function (x) { return x.cefr !== "Special"; }).length + '</b></div><div><span class="label">Lessons ready</span><b>' + ready + " / " + total + "</b></div></div>" +
       S.cur_levels.map(function (lv) {
         var ls = S.cur_lessons.filter(function (l) { return l.level_id === lv.id; }).sort(function (a, b) { return a.number - b.number; });
         return '<div class="panel"><div><h2>' + esc(lv.code) + " " + esc(lv.name) + '</h2><p class="hint">' + esc(lv.summary || "") + '</p></div><div class="cards">' + ls.map(function (l) {
