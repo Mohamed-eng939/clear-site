@@ -5,7 +5,7 @@
   var BANDS = ["pre_a1", "a1_1", "a1_2", "a1_3", "a2", "b1", "b2"];
   var BL = { pre_a1: "Pre-A1", a1_1: "A1.1", a1_2: "A1.2", a1_3: "A1.3", a2: "A2", b1: "B1", b2: "B2", custom: "Custom path (above B2)" };
   var LST = { new: "New", test_started: "Test started", test_completed: "Test completed", speaking_reviewed: "Speaking reviewed", report_sent: "Report sent", contacted: "Contacted", booked: "Booked", enrolled: "Enrolled", lost: "Lost" };
-  var PROG = { general: "General English", business: "Business English", conversation: "Conversation", esp: "ESP" };
+  var PROG = { general: "General English", business: "Business English", conversation: "Conversation", esp: "ESP", ielts_general: "IELTS General Training", ielts_academic: "IELTS Academic" };
   var SEC = { vocab_grammar: "Vocabulary and grammar", reading: "Reading", listening: "Listening" };
   var CRIT = [["fluency", "Fluency"], ["accuracy", "Accuracy"], ["pronunciation", "Pronunciation"], ["range", "Range of language"]];
   var FLAGK = ["tab_hidden", "fullscreen_exit", "window_blur", "copy", "paste", "context_menu"];
