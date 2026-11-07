@@ -4,12 +4,12 @@
   "use strict";
 
   /* ------------------------------------------------------------ settings */
-  /* Prices are set in EGP per level (8 one-hour lessons). Dollar prices are worked out from the saved rate. */
+  /* Prices are fixed in dollars per level (8 one-hour lessons). EGP prices follow the saved exchange rate. */
   var PRICES = {
-    general:      { name: "General English",  ar: "الإنجليزية العامة",                egp: 4000 },
-    business:     { name: "Business English", ar: "إنجليزية الأعمال",                 egp: 5000 },
-    conversation: { name: "Conversation",     ar: "المحادثة",                         egp: 6000 },
-    esp:          { name: "ESP",              ar: "الإنجليزية لأغراض خاصة (ESP)",     egp: 7000 }
+    general:      { name: "General English",  ar: "الإنجليزية العامة",                usd: 79 },
+    business:     { name: "Business English", ar: "إنجليزية الأعمال",                 usd: 99 },
+    conversation: { name: "Conversation",     ar: "المحادثة",                         usd: 119 },
+    esp:          { name: "ESP",              ar: "الإنجليزية لأغراض خاصة (ESP)",     usd: 139 }
   };
   var DEFAULT_RATE = 50.6329;
   var SETUP_SQL = "alter table public.settings\n  add column if not exists instapay text,\n  add column if not exists rate_updated_at timestamptz,\n  add column if not exists rate_source text;";
@@ -221,24 +221,25 @@
 
   /* ------------------------------------------------------------ business rules */
   function liveRate() { return (S.settings && Number(S.settings.usd_egp_rate)) || DEFAULT_RATE; }
-  /* dollar price = EGP price at the saved rate, rounded up to a whole dollar */
-  function usdFromEgp(egp) { return Math.ceil(Number(egp) / liveRate() - 1e-9); }
+  /* EGP price = dollar price at the saved rate, to the nearest 10 pounds */
+  function egpFromUsd(usd, rate) { return Math.round(Number(usd) * (rate || liveRate()) / 10) * 10; }
   function priceFor(program, levels, offOverride) {
     var p = PRICES[program] || PRICES.general;
     var pk = PACKS.filter(function (x) { return x.levels === levels; })[0] || PACKS[0];
     var off = offOverride != null ? offOverride : pk.off;
-    var egp = Math.round(p.egp * levels * (1 - off));
-    return { list: usdFromEgp(p.egp * levels), off: off, usd: usdFromEgp(egp), egp: egp };
+    var usd = Math.round(p.usd * levels * (1 - off));
+    return { list: p.usd * levels, off: off, usd: usd, egp: egpFromUsd(usd) };
   }
+  /* what a payment is worth in dollars: dollar payments as they are, EGP payments at the rate saved with them */
+  function payUsd(p) { return p.currency === "USD" ? Number(p.amount) : Number(p.amount) / (Number(p.egp_rate) || liveRate()); }
   function pkgPaidFraction(pkg, upTo) {
-    var egp = Math.round((PRICES[pkg.program] || PRICES.general).egp * pkg.levels * (1 - Number(pkg.discount_pct) / 100));
     return S.payments.filter(function (p) { return p.package_id === pkg.id && (!upTo || p.created_at <= upTo); }).reduce(function (a, p) {
-      return a + (p.currency === "EGP" ? Number(p.amount) / (egp || 1) : Number(p.amount) / (Number(pkg.price_usd) || 1));
+      return a + payUsd(p) / (Number(pkg.price_usd) || 1);
     }, 0);
   }
-  function pkgRemaining(pkg, cur) {
+  function pkgRemaining(pkg, cur, rate) {
     var f = Math.max(0, 1 - pkgPaidFraction(pkg));
-    if (cur === "EGP") return Math.round((PRICES[pkg.program] || PRICES.general).egp * pkg.levels * (1 - Number(pkg.discount_pct) / 100) * f);
+    if (cur === "EGP") return egpFromUsd(Number(pkg.price_usd) * f, rate);
     return Math.round(Number(pkg.price_usd) * f * 100) / 100;
   }
   function pkgUsed(pkg) { return S.lessons.filter(function (l) { return l.package_id === pkg.id && USED.indexOf(l.status) >= 0; }).length; }
@@ -493,11 +494,11 @@
         (paid ? "" : '<form data-form="addpay" data-id="' + p.id + '" class="addbox"><div class="fields">' +
           '<div class="f"><label for="pa' + p.id + '">Amount received</label><input id="pa' + p.id + '" name="amount" type="number" step="0.01" min="0.01" required value="' + rem + '"></div>' +
           '<div class="f"><label for="pc' + p.id + '">Currency</label><select id="pc' + p.id + '" name="currency" data-change="paycur" data-id="' + p.id + '"><option>USD</option><option>EGP</option></select></div>' +
-          '<div class="f" data-rate="1"><label for="px' + p.id + '">EGP per $1 (kept on the record)</label><input id="px' + p.id + '" name="egp_rate" type="number" step="0.0001" min="1" value="' + esc(S.settings ? S.settings.usd_egp_rate : "") + '"></div>' +
+          '<div class="f" data-rate="1"><label for="px' + p.id + '">EGP per $1 used for this payment (kept on the record)</label><input id="px' + p.id + '" name="egp_rate" type="number" step="0.0001" min="1" value="' + esc(S.settings ? S.settings.usd_egp_rate : "") + '"></div>' +
           '<div class="f"><label for="pm' + p.id + '">Method</label><select id="pm' + p.id + '" name="method">' + opt(METHODS, "InstaPay") + "</select></div>" +
           '<div class="f"><label for="pr' + p.id + '">Reference</label><input id="pr' + p.id + '" name="reference" placeholder="Transfer ID or last digits"></div>' +
           '<div class="f"><label for="pd' + p.id + '">Date received</label><input id="pd' + p.id + '" name="paid_on" type="date" value="' + todayStr() + '" required></div></div>' +
-          '<p class="hint" data-eq>' + payEqText(rem, "USD", S.settings ? S.settings.usd_egp_rate : 0) + '</p><div class="acts"><button class="btn" type="submit">Record payment and create receipt</button></div></form>') +
+          '<p class="hint" data-eq>' + payEqText(rem, "USD", liveRate()) + '</p><div class="acts"><button class="btn" type="submit">Record payment and create receipt</button></div></form>') +
         '<div class="acts"><button type="button" class="btn danger sm" data-act="delpkg" data-id="' + p.id + '">Delete package</button></div></div>';
     }).join("");
     var prog = s.program || "general";
@@ -509,7 +510,7 @@
   }
   function pkgPreview(prog, levels) {
     var p = priceFor(prog, levels);
-    return "Price: <b>" + money(p.usd) + "</b> (EGP " + p.egp.toLocaleString("en-US") + ")" + (p.off ? ", list " + money(p.list) : "");
+    return "Price: <b>" + money(p.usd) + "</b> (about EGP " + p.egp.toLocaleString("en-US") + " today)" + (p.off ? ", list " + money(p.list) : "");
   }
   function receiptText(pay, s, pkg) {
     return ["CLEAR English Academy", "Payment receipt", "",
@@ -530,8 +531,8 @@
     if (!pkg) return "";
     var f = pkgPaidFraction(pkg, p.created_at);
     if (f >= 0.999) return "Paid in full";
-    var egp = Math.round((PRICES[pkg.program] || PRICES.general).egp * pkg.levels * (1 - Number(pkg.discount_pct) / 100));
-    var left = (1 - f) * (p.currency === "EGP" ? egp : Number(pkg.price_usd));
+    var leftUsd = (1 - f) * Number(pkg.price_usd);
+    var left = p.currency === "EGP" ? leftUsd * (Number(p.egp_rate) || liveRate()) : leftUsd;
     return "Balance remaining " + money(Math.round(left * 100) / 100, p.currency);
   }
   function receiptRows(c) {
@@ -865,13 +866,21 @@
     var old = liveRate();
     if (btn) { btn.disabled = true; btn.textContent = "Checking the rate…"; }
     return fetchLatestRate().then(function (r) {
-      var upd = { usd_egp_rate: r.rate };
-      if (hasPriceCols()) { upd.rate_updated_at = new Date().toISOString(); upd.rate_source = r.source; }
-      return act(sb.from("settings").update(upd).eq("id", 1).select("id"), null).then(function (rows) {
-        if (!rows || !rows.length) throw new Error("Nothing was saved. Refresh the page and sign in again.");
-        toast("Rate updated: EGP " + roundRate(old) + " to EGP " + roundRate(r.rate) + " per $1 (" + r.source + ").");
+      if (Math.abs(r.rate - old) < 0.00005) { toast("Your saved rate is already EGP " + roundRate(r.rate) + " per $1 (" + r.source + ")."); return; }
+      var g = PRICES.general.usd;
+      return ask("The latest market rate is EGP " + roundRate(r.rate) + " per $1 (" + r.source + "). Your saved rate is EGP " + roundRate(old) + ". EGP prices will change with it, for example General English $" + g + " goes from EGP " + n0(egpFromUsd(g, old)) + " to EGP " + n0(egpFromUsd(g, r.rate)) + ". Use the new rate?", "Use this rate").then(function (ok) {
+        if (!ok) { toast("Rate left as it was."); return; }
+        return saveRate(r, old);
       });
     }).then(null, function (e) { toast(e.message || "Could not update the rate.", true); }).then(refresh);
+  }
+  function saveRate(r, old) {
+    var upd = { usd_egp_rate: r.rate };
+    if (hasPriceCols()) { upd.rate_updated_at = new Date().toISOString(); upd.rate_source = r.source; }
+    return act(sb.from("settings").update(upd).eq("id", 1).select("id"), null).then(function (rows) {
+      if (!rows || !rows.length) throw new Error("Nothing was saved. Refresh the page and sign in again.");
+      toast("Rate updated: EGP " + roundRate(old) + " to EGP " + roundRate(r.rate) + " per $1 (" + r.source + ").");
+    });
   }
 
   /* ---- discount and message options (a discount is never on after a reload, so one is not sent by mistake) */
@@ -890,16 +899,16 @@
   }
   function savePM() { try { localStorage.setItem(PM_KEY, JSON.stringify({ pm: UI.pm, disc: UI.disc })); } catch (e) { /* storage blocked */ } }
   function discOn() { return !!(UI.disc && UI.disc.on && Number(UI.disc.value) > 0); }
-  /* one package: price after the package discount, then after your own discount if it is switched on for that package */
+  /* one package (dollars): price after the package discount, then after your own discount if it is switched on for that package */
   function offerFor(program, levels) {
     var p = PRICES[program] || PRICES.general;
     var pk = PACKS.filter(function (x) { return x.levels === levels; })[0] || PACKS[0];
-    var list = p.egp * levels, base = Math.round(list * (1 - pk.off)), fin = base;
+    var list = p.usd * levels, base = Math.round(list * (1 - pk.off)), fin = base;
     if (discOn() && UI.disc.levels[levels]) {
       var v = Number(UI.disc.value);
       fin = UI.disc.type === "pct" ? Math.round(base * (1 - Math.min(100, v) / 100)) : Math.max(0, base - Math.round(v));
     }
-    return { levels: levels, lessons: levels * 8, bundlePct: Math.round(pk.off * 100), list: list, base: base, fin: fin, extra: base - fin, usdBase: usdFromEgp(base), usdFin: usdFromEgp(fin) };
+    return { levels: levels, lessons: levels * 8, bundlePct: Math.round(pk.off * 100), list: list, base: base, fin: fin, extra: base - fin, egpBase: egpFromUsd(base), egpFin: egpFromUsd(fin) };
   }
 
   /* ---- the message */
@@ -911,11 +920,11 @@
     var p = String(d).split("-"); if (p.length !== 3) return "";
     return ar ? +p[2] + " " + AR_MONTHS[+p[1] - 1] + " " + p[0] : prettyDate(d);
   }
-  function priceText(egp, usd, ar, cur) {
+  function priceText(usd, egp, ar, cur) {
     var e = ar ? n0(egp) + " جنيه" : "EGP " + n0(egp), u = ar ? n0(usd) + " دولار" : "$" + n0(usd);
     if (cur === "egp") return e;
     if (cur === "usd") return u;
-    return ar ? e + " (حوالي " + u + ")" : e + " (about " + u + ")";
+    return ar ? u + " (حوالي " + e + ")" : u + " (about " + e + ")";
   }
   function levelLabel(o, ar) {
     if (ar) return AR_LEVELS[o.levels] + (o.bundlePct ? "، خصم الباقة " + o.bundlePct + "%" : "");
@@ -923,8 +932,8 @@
   }
   function programBlock(key, ar, m) {
     var lines = (m.packs ? [1, 2, 3] : [1]).map(function (lv) {
-      var o = offerFor(key, lv), now = priceText(o.fin, o.usdFin, ar, m.cur);
-      if (o.extra) return "• " + levelLabel(o, ar) + ": " + now + (ar ? "، بدل " : ", was ") + priceText(o.base, o.usdBase, ar, m.cur);
+      var o = offerFor(key, lv), now = priceText(o.fin, o.egpFin, ar, m.cur);
+      if (o.extra) return "• " + levelLabel(o, ar) + ": " + now + (ar ? "، بدل " : ", was ") + priceText(o.base, o.egpBase, ar, m.cur);
       return "• " + levelLabel(o, ar) + ": " + now;
     });
     return lines.join("\n");
@@ -946,7 +955,7 @@
       out.push(ar ? "*الأسعار*" : "*Prices*"); out.push(programBlock(keys[0], ar, m)); out.push("");
     }
     if (discOn()) {
-      var desc = d.type === "pct" ? (ar ? "خصم " + Number(d.value) + "%" : Number(d.value) + "% off") : (ar ? "خصم " + n0(d.value) + " جنيه على كل باقة" : "EGP " + n0(d.value) + " off each package");
+      var desc = d.type === "pct" ? (ar ? "خصم " + Number(d.value) + "%" : Number(d.value) + "% off") : (ar ? "خصم " + n0(d.value) + " دولار على كل باقة" : "$" + n0(d.value) + " off each package");
       var lvls = [1, 2, 3].filter(function (l) { return d.levels[l] && (m.packs || l === 1); });
       var all = [1, 2, 3].filter(function (l) { return m.packs || l === 1; });
       var line = (ar ? "*العرض:* " : "*Offer:* ") + (d.label ? d.label + " – " : "") + desc + ".";
@@ -965,8 +974,8 @@
         ? "*ملحوظة:* حصص كل مستوى (8 حصص) صالحة لمدة 10 أسابيع من أول حصة، ويمكن تأجيل الحصة بإخطارنا قبلها بـ 24 ساعة على الأقل."
         : "*Good to know:* the 8 lessons of each level are valid for 10 weeks from the first lesson. Lessons can be rescheduled with at least 24 hours' notice.");
     }
-    if (m.cur !== "egp") {
-      out.push(ar ? "أسعار الدولار محسوبة على سعر " + rate + " جنيه للدولار، وقد تتغير مع سعر الصرف." : "Dollar prices are worked out at EGP " + rate + " per $1 and can change with the exchange rate.");
+    if (m.cur !== "usd") {
+      out.push(ar ? "الأسعار بالجنيه محسوبة على سعر " + rate + " جنيه للدولار، وقد تتغير مع سعر الصرف." : "EGP prices are worked out at EGP " + rate + " per $1 and can change with the exchange rate.");
     }
     return out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "");
   }
@@ -976,10 +985,10 @@
     return Object.keys(PRICES).map(function (k) {
       var rows = [1, 2, 3].map(function (lv) {
         var o = offerFor(k, lv);
-        var price = o.extra ? "<s>" + esc(money(o.base, "EGP")) + "</s> <b>" + esc(money(o.fin, "EGP")) + "</b>" : "<b>" + esc(money(o.base, "EGP")) + "</b>";
-        var sub = o.lessons + " lessons" + (o.bundlePct ? ", " + o.bundlePct + "% package discount (list " + money(o.list, "EGP") + ")" : "");
+        var price = o.extra ? "<s>" + esc(money(o.base)) + "</s> <b>" + esc(money(o.fin)) + "</b>" : "<b>" + esc(money(o.base)) + "</b>";
+        var sub = o.lessons + " lessons" + (o.bundlePct ? ", " + o.bundlePct + "% package discount (list " + money(o.list) + ")" : "");
         return '<div class="prow"><span>' + (lv === 1 ? "1 level" : lv + " levels") + '<br><span class="sub">' + esc(sub) + '</span></span><span class="pr">' + price +
-          '<br><span class="sub">about ' + esc("$" + n0(o.extra ? o.usdFin : o.usdBase)) + (o.extra ? " · saves " + esc(money(o.extra, "EGP")) : "") + "</span></span></div>";
+          '<br><span class="sub">about ' + esc(money(o.extra ? o.egpFin : o.egpBase, "EGP")) + (o.extra ? " · saves " + esc(money(o.extra)) : "") + "</span></span></div>";
       }).join("");
       return '<div class="pcard"><h3>' + esc(PRICES[k].name) + "</h3>" + rows + "</div>";
     }).join("");
@@ -993,20 +1002,20 @@
     pmState();
     var cfg = S.settings || {}, d = UI.disc, m = UI.pm;
     var chk = function (name, on, label) { return '<label class="chk"><input type="checkbox" data-pc="1" name="' + name + '"' + (on ? " checked" : "") + "> " + label + "</label>"; };
-    var rateLine = "Dollar prices use <b>EGP " + roundRate(liveRate()) + "</b> per $1" + (cfg.rate_updated_at ? " (updated " + esc(fmtStamp(cfg.rate_updated_at)) + (cfg.rate_source ? ", " + esc(cfg.rate_source) : "") + ")" : "") + ", rounded up to a whole dollar. Prices are set in EGP.";
+    var rateLine = "Prices are fixed in dollars. EGP prices use <b>EGP " + roundRate(liveRate()) + "</b> per $1" + (cfg.rate_updated_at ? " (updated " + esc(fmtStamp(cfg.rate_updated_at)) + (cfg.rate_source ? ", " + esc(cfg.rate_source) : "") + ")" : "") + ", to the nearest 10 pounds.";
     return '<div class="acts" style="margin-top:16px"><p class="hint" style="flex:1 1 260px">' + rateLine + '</p><button type="button" class="btn sec sm" data-act="fetchrate">Update to today\'s rate</button></div>' +
       '<div class="pgrid" style="margin-top:12px"><div class="panel" style="gap:14px"><div><h2>Discount</h2><p class="hint">Switch it on to see it in the prices below and in the message. You choose the percentage or the amount.</p></div>' +
         chk("d_on", d.on, "<b>Apply a discount</b>") +
-        '<div class="fields"><div class="f"><label for="dt">Type</label><select id="dt" data-pc="1" name="d_type"><option value="pct"' + (d.type === "pct" ? " selected" : "") + '>Percentage off</option><option value="amt"' + (d.type === "amt" ? " selected" : "") + '>Amount off each package (EGP)</option></select></div>' +
-        '<div class="f"><label for="dv">Value <span id="dunit">' + (d.type === "pct" ? "(%)" : "(EGP)") + '</span></label><input id="dv" data-pc="1" name="d_value" type="number" min="0" step="any" inputmode="decimal" value="' + esc(d.value) + '"></div>' +
+        '<div class="fields"><div class="f"><label for="dt">Type</label><select id="dt" data-pc="1" name="d_type"><option value="pct"' + (d.type === "pct" ? " selected" : "") + '>Percentage off</option><option value="amt"' + (d.type === "amt" ? " selected" : "") + '>Amount off each package ($)</option></select></div>' +
+        '<div class="f"><label for="dv">Value <span id="dunit">' + (d.type === "pct" ? "(%)" : "($)") + '</span></label><input id="dv" data-pc="1" name="d_value" type="number" min="0" step="any" inputmode="decimal" value="' + esc(d.value) + '"></div>' +
         '<div class="f"><label for="dl">Offer name (optional)</label><input id="dl" data-pc="1" name="d_label" placeholder="e.g. Launch offer" value="' + esc(d.label) + '"></div>' +
         '<div class="f"><label for="du">Valid until (optional)</label><input id="du" data-pc="1" name="d_until" type="date" value="' + esc(d.until) + '"></div></div>' +
         '<div><span class="label">Applies to</span><div class="acts">' + chk("d_l1", d.levels[1], "1 level") + chk("d_l2", d.levels[2], "2 levels") + chk("d_l3", d.levels[3], "3 levels") + "</div></div>" +
-        '<p class="hint">The percentage comes off the price after the package discount. An amount comes off each package you tick.</p></div>' +
+        '<p class="hint">The percentage comes off the price after the package discount. A dollar amount comes off each package you tick.</p></div>' +
       '<div class="panel" style="gap:14px"><div><h2>Message options</h2><p class="hint">What goes into the message you copy.</p></div><div class="fields">' +
         '<div class="f"><label for="mp">Program</label><select id="mp" data-pc="1" name="m_program"><option value="all"' + (m.program === "all" ? " selected" : "") + ">All programs</option>" + opt(Object.keys(PRICES), m.program, mapNames()) + "</select></div>" +
         '<div class="f"><label for="ml">Language</label><select id="ml" data-pc="1" name="m_lang"><option value="en"' + (m.lang === "en" ? " selected" : "") + '>English</option><option value="ar"' + (m.lang === "ar" ? " selected" : "") + ">Arabic (العربية)</option></select></div>" +
-        '<div class="f"><label for="mc">Show prices in</label><select id="mc" data-pc="1" name="m_cur"><option value="both"' + (m.cur === "both" ? " selected" : "") + '>EGP and dollars</option><option value="egp"' + (m.cur === "egp" ? " selected" : "") + '>EGP only</option><option value="usd"' + (m.cur === "usd" ? " selected" : "") + ">Dollars only</option></select></div></div>" +
+        '<div class="f"><label for="mc">Show prices in</label><select id="mc" data-pc="1" name="m_cur"><option value="both"' + (m.cur === "both" ? " selected" : "") + '>Dollars and EGP</option><option value="usd"' + (m.cur === "usd" ? " selected" : "") + '>Dollars only</option><option value="egp"' + (m.cur === "egp" ? " selected" : "") + ">EGP only</option></select></div></div>" +
         '<div class="acts">' + chk("m_packs", m.packs, "2 and 3 level packages") + chk("m_insta", m.insta, "InstaPay number") + chk("m_terms", m.terms, "Key terms") + "</div></div></div>" +
       '<h3 style="margin:22px 0 4px">Price list <span id="discstate">' + (discOn() ? '<span class="pill warn">Discount on</span>' : "") + '</span></h3><div id="plist" class="pgrid">' + priceCards() + "</div>" +
       '<div class="panel msgbox" style="margin-top:22px;gap:12px"><div><h2>Message to send</h2><p class="hint">Edit it freely. Changing an option above writes it again from scratch.</p></div>' +
@@ -1030,14 +1039,16 @@
     if (!readPC()) return true;
     var pl = $("#plist"); if (pl) pl.innerHTML = priceCards();
     var ta = $("#msgtext"); if (ta) { ta.value = buildMessage(); ta.setAttribute("dir", UI.pm.lang === "ar" ? "rtl" : "ltr"); }
-    var u = $("#dunit"); if (u) u.textContent = UI.disc.type === "pct" ? "(%)" : "(EGP)";
+    var u = $("#dunit"); if (u) u.textContent = UI.disc.type === "pct" ? "(%)" : "($)";
     var st = $("#discstate"); if (st) st.innerHTML = discOn() ? '<span class="pill warn">Discount on</span>' : "";
     var w = $("#pmwarn"); if (w) w.innerHTML = pmWarning();
     return true;
   }
   function payEqText(amount, cur, rate) {
     amount = Number(amount); rate = Number(rate);
-    return cur === "USD" && amount > 0 && rate > 0 ? "About " + money(Math.round(amount * rate), "EGP") + " at EGP " + roundRate(rate) + " per $1." : "";
+    if (!(amount > 0 && rate > 0)) return "";
+    if (cur === "USD") return "About " + money(Math.round(amount * rate), "EGP") + " at EGP " + roundRate(rate) + " per $1.";
+    return "About " + money(Math.round(amount / rate * 100) / 100) + " at EGP " + roundRate(rate) + " per $1.";
   }
   function payEq(form) {
     var box = $("[data-eq]", form); if (!box) return;
@@ -1087,7 +1098,7 @@
     return '<div class="panel" style="margin-top:20px;max-width:520px"><div><h2>Academy settings</h2><p class="hint">Used when you record payments, price packages and build lessons.</p></div>' +
       '<form data-form="saverate"><div class="fields" style="grid-template-columns:1fr"><div class="f"><label for="sr">USD to EGP rate (EGP for $1)</label>' +
       '<div class="acts" style="flex-wrap:wrap"><input id="sr" name="usd_egp_rate" type="number" step="0.0001" min="1" required style="flex:1 1 140px;width:auto" value="' + esc(cfg.usd_egp_rate) + '"><button type="button" class="btn sec" data-act="fetchrate">Update to today\'s rate</button></div>' +
-      '<span class="hint">' + esc(rateInfo) + ' The button fetches the current market rate and saves it. Compare it with your bank or InstaPay rate if you need to, and type your own number if you prefer. Dollar prices and new payments use it; each payment already recorded keeps the rate it was received at.</span></div>' +
+      '<span class="hint">' + esc(rateInfo) + ' The button fetches the current market rate and asks you to confirm before saving. Compare it with your bank or InstaPay rate if you need to, and type your own number if you prefer. Prices are fixed in dollars; EGP prices and new payments use this rate. Each payment already recorded keeps the rate it was received at.</span></div>' +
       '<div class="f"><label for="si">InstaPay number or address</label><input id="si" name="instapay" placeholder="e.g. 01xxxxxxxxx or name@instapay"' + (cols ? "" : " disabled") + ' value="' + esc(cfg.instapay) + '"><span class="hint">' + (cols ? "Goes into the price message you copy from Payments." : "Needs the one-time database update below.") + "</span></div>" +
       '<div class="f"><label for="sl">Default lesson link (Zoom or Google Meet)</label><input id="sl" name="default_meeting_url" type="url" placeholder="https://" value="' + esc(cfg.default_meeting_url) + '"><span class="hint">New lessons get this link. Students see a Join button.</span></div></div>' +
       '<div class="acts" style="margin-top:10px"><button class="btn" type="submit">Save settings</button><button type="button" class="btn sec" data-act="applylink">Use the link for lessons that have none</button></div></form></div>' +
@@ -1887,7 +1898,11 @@
     if (window.CLEAR_PL && window.CLEAR_PL.input(e)) return;
     if (e.target.id === "q") { UI.q = e.target.value; $("#list").innerHTML = studentRows(); return; }
     if (livePrices(e)) return;
-    if (e.target.form && e.target.form.getAttribute("data-form") === "addpay") { payEq(e.target.form); return; }
+    if (e.target.form && e.target.form.getAttribute("data-form") === "addpay") {
+      var pf = e.target.form;
+      if (e.target.name === "egp_rate" && pf.currency.value === "EGP") { var pk2 = byId(S.packages, pf.getAttribute("data-id")); if (pk2 && Number(pf.egp_rate.value) > 0) pf.amount.value = pkgRemaining(pk2, "EGP", Number(pf.egp_rate.value)); }
+      payEq(pf); return;
+    }
     liveSchedule(e);
   }
   function onChange(e) {
@@ -1914,8 +1929,7 @@
     }
     if (ch === "paycur") {
       var pkg = byId(S.packages, t.getAttribute("data-id"));
-      if (pkg) t.form.amount.value = pkgRemaining(pkg, t.value);
-      var rf = $("[data-rate]", t.form); if (rf) rf.hidden = t.value !== "USD";
+      if (pkg) t.form.amount.value = pkgRemaining(pkg, t.value, Number(t.form.egp_rate.value) || null);
       payEq(t.form);
       return;
     }
@@ -2083,7 +2097,7 @@
   function addPayment(pkgId, d) {
     var pkg = byId(S.packages, pkgId), amount = Number(d.amount);
     if (!pkg || !(amount > 0)) { toast("Enter the amount received.", true); return Promise.resolve(); }
-    return act(sb.from("payments").insert({ student_id: pkg.student_id, package_id: pkgId, amount: amount, currency: d.currency, method: d.method, reference: nul(d.reference), paid_on: d.paid_on, egp_rate: d.currency === "USD" ? (Number(d.egp_rate) || (S.settings ? Number(S.settings.usd_egp_rate) : null)) : null }).select().single(), null).then(function (pay) {
+    return act(sb.from("payments").insert({ student_id: pkg.student_id, package_id: pkgId, amount: amount, currency: d.currency, method: d.method, reference: nul(d.reference), paid_on: d.paid_on, egp_rate: Number(d.egp_rate) || liveRate() }).select().single(), null).then(function (pay) {
       return loadAll().then(function () {
         var p2 = byId(S.packages, pkgId), s = byId(S.students, pkg.student_id), jobs = [];
         if (p2 && p2.status === "pending" && pkgIsPaid(p2)) jobs.push(sb.from("packages").update({ status: "active" }).eq("id", pkgId));
