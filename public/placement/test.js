@@ -113,17 +113,17 @@
   /* ---------- text (English + Arabic) ---------- */
   var T = {
     vocab_grammar: {
-      en: '<div class="label">Section 1 of 4</div><h2>Vocabulary and grammar</h2><p>You will see short questions. Choose the best answer.</p><p>Every question has its own timer in the <b>top right corner</b>. When the time is over, we move on automatically.</p><p>If you are not sure, choose your best guess or press <b>Next</b>. Some questions may feel easy and some difficult. That is normal.</p><p>If you feel stuck, press <b>I\'m stuck</b> at the bottom to end this section.</p>',
-      ar: '<div class="label">القسم 1 من 4</div><h2>المفردات والقواعد</h2><p>ستظهر لك أسئلة قصيرة. اختر الإجابة الأنسب.</p><p>لكل سؤال مؤقّت خاص به في <b>أعلى الزاوية اليمنى</b>. عند انتهاء الوقت ننتقل تلقائيًا إلى السؤال التالي.</p><p>إن لم تكن متأكدًا فاختر أفضل تخمين أو اضغط <b>التالي</b>. قد تبدو بعض الأسئلة سهلة وبعضها صعبًا، وهذا طبيعي.</p><p>إذا شعرت أنك عالق فاضغط <b>أنا عالق</b> في الأسفل لإنهاء هذا القسم.</p>' },
+      en: '<div class="label">Section {n} of {total}</div><h2>Vocabulary and grammar</h2><p>You will see short questions. Choose the best answer.</p><p>Every question has its own timer in the <b>top right corner</b>. When the time is over, we move on automatically.</p><p>If you are not sure, choose your best guess or press <b>Next</b>. Some questions may feel easy and some difficult. That is normal.</p><p>If you feel stuck, press <b>I\'m stuck</b> at the bottom to end this section.</p>',
+      ar: '<div class="label">القسم {n} من {total}</div><h2>المفردات والقواعد</h2><p>ستظهر لك أسئلة قصيرة. اختر الإجابة الأنسب.</p><p>لكل سؤال مؤقّت خاص به في <b>أعلى الزاوية اليمنى</b>. عند انتهاء الوقت ننتقل تلقائيًا إلى السؤال التالي.</p><p>إن لم تكن متأكدًا فاختر أفضل تخمين أو اضغط <b>التالي</b>. قد تبدو بعض الأسئلة سهلة وبعضها صعبًا، وهذا طبيعي.</p><p>إذا شعرت أنك عالق فاضغط <b>أنا عالق</b> في الأسفل لإنهاء هذا القسم.</p>' },
     reading: {
-      en: '<div class="label">Section 2 of 4</div><h2>Reading</h2><p>You will read a short text and answer three questions about it.</p><p>One timer in the <b>top right corner</b> covers the text and its questions. Read carefully, then answer. You cannot go back to an earlier text.</p><p>If you feel stuck, press <b>I\'m stuck</b> at the bottom to end this section.</p>',
-      ar: '<div class="label">القسم 2 من 4</div><h2>القراءة</h2><p>ستقرأ نصًا قصيرًا ثم تجيب عن ثلاثة أسئلة عنه.</p><p>مؤقّت واحد في <b>أعلى الزاوية اليمنى</b> يشمل النص وأسئلته. اقرأ بتركيز ثم أجب. لا يمكن الرجوع إلى نص سابق.</p><p>إذا شعرت أنك عالق فاضغط <b>أنا عالق</b> في الأسفل لإنهاء هذا القسم.</p>' },
+      en: '<div class="label">Section {n} of {total}</div><h2>Reading</h2><p>You will read a short text and answer three questions about it.</p><p>One timer in the <b>top right corner</b> covers the text and its questions. Read carefully, then answer. You cannot go back to an earlier text.</p><p>If you feel stuck, press <b>I\'m stuck</b> at the bottom to end this section.</p>',
+      ar: '<div class="label">القسم {n} من {total}</div><h2>القراءة</h2><p>ستقرأ نصًا قصيرًا ثم تجيب عن ثلاثة أسئلة عنه.</p><p>مؤقّت واحد في <b>أعلى الزاوية اليمنى</b> يشمل النص وأسئلته. اقرأ بتركيز ثم أجب. لا يمكن الرجوع إلى نص سابق.</p><p>إذا شعرت أنك عالق فاضغط <b>أنا عالق</b> في الأسفل لإنهاء هذا القسم.</p>' },
     listening: {
-      en: '<div class="label">Section 3 of 4</div><h2>Listening</h2><p>Press <b>Play</b> to hear a short recording. You can play it <b>{plays} times</b>. Then answer the three questions.</p><p>Use headphones if you can. The timer starts when the page opens, so press Play straight away.</p><p>If you feel stuck, press <b>I\'m stuck</b> at the bottom to end this section.</p>',
-      ar: '<div class="label">القسم 3 من 4</div><h2>الاستماع</h2><p>اضغط <b>تشغيل</b> لتسمع تسجيلًا قصيرًا. يمكنك تشغيله <b>{plays} مرات</b> فقط. ثم أجب عن الأسئلة الثلاثة.</p><p>يُفضَّل استخدام سماعات. يبدأ المؤقّت عند ظهور الصفحة، فاضغط «تشغيل» فورًا.</p><p>إذا شعرت أنك عالق فاضغط <b>أنا عالق</b> في الأسفل لإنهاء هذا القسم.</p>' },
+      en: '<div class="label">Section {n} of {total}</div><h2>Listening</h2><p>Press <b>Play</b> to hear a short recording. You can play it <b>{plays} times</b>. Then answer the three questions.</p><p>Use headphones if you can. The timer starts when the page opens, so press Play straight away.</p><p>If you feel stuck, press <b>I\'m stuck</b> at the bottom to end this section.</p>',
+      ar: '<div class="label">القسم {n} من {total}</div><h2>الاستماع</h2><p>اضغط <b>تشغيل</b> لتسمع تسجيلًا قصيرًا. يمكنك تشغيله <b>{plays} مرات</b> فقط. ثم أجب عن الأسئلة الثلاثة.</p><p>يُفضَّل استخدام سماعات. يبدأ المؤقّت عند ظهور الصفحة، فاضغط «تشغيل» فورًا.</p><p>إذا شعرت أنك عالق فاضغط <b>أنا عالق</b> في الأسفل لإنهاء هذا القسم.</p>' },
     speaking: {
-      en: '<div class="label">Section 4 of 4</div><h2>Speaking</h2><p>You will see four short tasks. For each one you get a few seconds to think, then <b>recording starts automatically</b>.</p><p>Speak naturally. Press <b>Finish</b> when you are done. A teacher will listen to your answers.</p><p>Your voice is always recorded. The camera is your choice.</p>',
-      ar: '<div class="label">القسم 4 من 4</div><h2>التحدّث</h2><p>ستظهر لك أربع مهام قصيرة. لكل مهمة بضع ثوانٍ للتفكير ثم <b>يبدأ التسجيل تلقائيًا</b>.</p><p>تحدّث بشكل طبيعي واضغط <b>إنهاء</b> عندما تنتهي. سيستمع معلّم إلى إجاباتك.</p><p>الصوت يُسجَّل دائمًا، أما الكاميرا فهي اختيارك.</p>' }
+      en: '<div class="label">Section {n} of {total}</div><h2>Speaking</h2><p>You will see {count} short tasks. For each one you get a few seconds to think, then <b>recording starts automatically</b>.</p><p>Speak naturally. Press <b>Finish</b> when you are done. A teacher will listen to your answers.</p><p>Your voice is always recorded. The camera is your choice.</p>',
+      ar: '<div class="label">القسم {n} من {total}</div><h2>التحدّث</h2><p>ستظهر لك {count} مهام قصيرة. لكل مهمة بضع ثوانٍ للتفكير ثم <b>يبدأ التسجيل تلقائيًا</b>.</p><p>تحدّث بشكل طبيعي واضغط <b>إنهاء</b> عندما تنتهي. سيستمع معلّم إلى إجاباتك.</p><p>الصوت يُسجَّل دائمًا، أما الكاميرا فهي اختيارك.</p>' }
   };
 
   /* ---------- start: find the attempt ---------- */
@@ -169,8 +169,8 @@
     dockOn(false);
     var camOk = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     screen('<div class="card">' + bi(
-      '<h1>Welcome</h1><p>This test places you in the right CLEAR level. Please:</p><ul><li>Sit in a quiet place with a charged device and a stable connection.</li><li>Stay on this page. The test opens in <b>full screen</b>. Leaving the page or full screen is recorded for your teacher.</li><li>Expect up to <b>30 minutes</b> for the first three sections, then a few minutes of speaking.</li></ul><p>You will not see a score on screen. After a teacher listens to your speaking, we send your result and plan to your WhatsApp.</p>',
-      '<h1>مرحبًا بك</h1><p>هذا الاختبار يحدّد مستواك المناسب في CLEAR. من فضلك:</p><ul><li>اجلس في مكان هادئ مع جهاز مشحون واتصال مستقر.</li><li>ابقَ في هذه الصفحة. يفتح الاختبار <b>بملء الشاشة</b>، والخروج من الصفحة أو من ملء الشاشة يُسجَّل ويراه معلّمك.</li><li>تحتاج حتى <b>30 دقيقة</b> للأقسام الثلاثة الأولى، ثم دقائق قليلة للتحدّث.</li></ul><p>لن تظهر لك نتيجة على الشاشة. بعد أن يستمع معلّم إلى تحدّثك نرسل نتيجتك وخطتك على واتساب.</p>') + '</div>' +
+      '<h1>Welcome</h1><p>This test places you in the right CLEAR level. Please:</p><ul><li>Sit in a quiet place with a charged device and a stable connection.</li><li>Stay on this page. The test opens in <b>full screen</b>. Leaving the page or full screen is recorded for your teacher.</li><li>Expect up to <b>30 minutes</b> for the written sections (vocabulary, grammar and reading), then about <b>10 minutes</b> of speaking.</li></ul><p>You will not see a score on screen. After a teacher listens to your speaking, we send your result and plan to your WhatsApp.</p>',
+      '<h1>مرحبًا بك</h1><p>هذا الاختبار يحدّد مستواك المناسب في CLEAR. من فضلك:</p><ul><li>اجلس في مكان هادئ مع جهاز مشحون واتصال مستقر.</li><li>ابقَ في هذه الصفحة. يفتح الاختبار <b>بملء الشاشة</b>، والخروج من الصفحة أو من ملء الشاشة يُسجَّل ويراه معلّمك.</li><li>تحتاج حتى <b>30 دقيقة</b> للأقسام الكتابية (المفردات والقواعد والقراءة)، ثم حوالي <b>10 دقائق</b> للتحدّث.</li></ul><p>لن تظهر لك نتيجة على الشاشة. بعد أن يستمع معلّم إلى تحدّثك نرسل نتيجتك وخطتك على واتساب.</p>') + '</div>' +
       '<div class="card soft"><div class="label">Microphone and camera · الميكروفون والكاميرا</div>' +
       '<p id="micMsg">Press the button, allow the microphone, then say a few words. The bar should move.<br><span class="ar" dir="rtl">اضغط الزر واسمح بالميكروفون ثم قل بضع كلمات. يجب أن يتحرك الشريط.</span></p>' +
       '<div class="bar" aria-hidden="true"><i id="lvl"></i></div><div style="height:12px"></div>' +
@@ -223,10 +223,14 @@
   }
 
   /* ---------- section instruction page ---------- */
+  function fill(str, st) {
+    var total = st.total_sections || 4, order = total === 4 ? ["vocab_grammar", "reading", "listening", "speaking"] : ["vocab_grammar", "reading", "speaking"];
+    var n = order.indexOf(st.section) + 1;
+    return str.replace("{n}", n).replace("{total}", total).replace("{plays}", String(st.plays || 2)).replace("{count}", String(st.speak_n || (st.prompts || []).length || 4));
+  }
   function secIntro() {
     var st = S.st, t = T[st.section];
-    var plays = String(st.plays || 2);
-    screen('<div class="card">' + bi(t.en.replace("{plays}", plays), t.ar.replace("{plays}", plays)) + '</div><div class="row end"><button class="btn" id="go" type="button">Start · ابدأ</button></div>');
+    screen('<div class="card">' + bi(fill(t.en, st), fill(t.ar, st)) + '</div><div class="row end"><button class="btn" id="go" type="button">Start · ابدأ</button></div>');
     dockOn(false); $("#dock").hidden = false;
     $("#go").addEventListener("click", function () { next(); });
   }
@@ -349,7 +353,7 @@
   function speakIntro() {
     var t = T.speaking;
     dockOn(false); $("#dock").hidden = false;
-    screen('<div class="card">' + bi(t.en, t.ar) + '</div>' +
+    screen('<div class="card">' + bi(fill(t.en, S.st), fill(t.ar, S.st)) + '</div>' +
       '<div class="card soft"><div class="label">Check · فحص</div><p id="micMsg">Press to test again. · اضغط للاختبار مرة أخرى.</p><div class="bar"><i id="lvl"></i></div><div style="height:12px"></div>' +
       '<div class="row"><button class="btn secondary" id="micBtn" type="button">Test microphone · اختبر الميكروفون</button><label class="row" style="gap:8px"><input type="checkbox" id="camChk"' + (S.camera ? ' checked' : '') + '> <span>Use my camera (optional) · استخدم الكاميرا (اختياري)</span></label></div>' +
       '<div style="height:12px"></div><video id="prev" class="prev" playsinline muted hidden></video></div>' +
