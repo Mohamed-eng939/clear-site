@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://clearacademy.clearacademy7.workers.dev/sitemap.xml
