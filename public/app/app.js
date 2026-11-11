@@ -577,11 +577,24 @@
       contactFields("d", s) +
       '<div class="f"><label for="d5">Program</label><select id="d5" name="program"><option value="">Not chosen yet</option>' + opt(Object.keys(PRICES), s.program, mapNames()) + "</select></div>" +
       '<div class="f"><label for="d6">Level (CEFR)</label><select id="d6" name="cefr"><option value="">Not tested yet</option>' + opt(CEFR, s.cefr) + "</select></div>" +
+      '<div class="f"><label for="d6b">CLEAR level (what she sees)</label><select id="d6b" name="level_code"><option value="">Not set</option>' + S.cur_levels.map(function (lv) { return '<option value="' + esc(lv.code) + '"' + (s.level_code === lv.code ? " selected" : "") + ">" + esc(lv.code + " " + lv.name) + "</option>"; }).join("") + "</select></div>" +
       '<div class="f"><label for="d7">Status</label><select id="d7" name="status">' + opt(Object.keys(STATUS), s.status, STATUS) + "</select></div>" +
       '<div class="f"><label for="d9">Payment due flag</label><select id="d9" name="payment_due"><option value="">No</option><option value="1"' + (s.payment_due ? " selected" : "") + '>Yes: show reminder at top of her account</option></select></div>' +
       '<div class="f"><label for="d10">What is due (shown to student)</label><input id="d10" name="payment_due_note" placeholder="e.g. Level A1.2" value="' + esc(s.payment_due_note || "") + '"></div>' +
       '<div class="f wide"><label for="d8">Goal</label><textarea id="d8" name="goal">' + esc(s.goal) + "</textarea></div></div>" +
-      '<div class="acts" style="margin-top:12px"><button class="btn" type="submit">Save details</button>' + (s.phone ? '<a class="btn sec" href="' + esc(waLink(s.phone)) + '" target="_blank" rel="noopener">Open WhatsApp chat</a>' : "") + "</div></form></div>";
+      '<div class="acts" style="margin-top:12px"><button class="btn" type="submit">Save details</button>' + (s.phone ? '<a class="btn sec" href="' + esc(waLink(s.phone)) + '" target="_blank" rel="noopener">Open WhatsApp chat</a>' : "") + "</div></form></div>" + levelResultSection(s);
+  }
+  function levelResultSection(s) {
+    if (!S.cur_levels.length) return "";
+    var past = (S.level_results || []).filter(function (r) { return r.student_id === s.id; }).sort(function (a, b) { return a.decided_at < b.decided_at ? 1 : -1; });
+    return '<div class="sec"><h3>Level result</h3><p class="hint">A pass moves her to the next level automatically. Needs practice keeps her where she is. The exam will write here too.</p>' +
+      '<form data-form="levelresult" data-id="' + s.id + '"><div class="fields">' +
+      '<div class="f"><label for="lr1">Level</label><select id="lr1" name="level_code">' + S.cur_levels.map(function (lv) { return '<option value="' + esc(lv.code) + '"' + (s.level_code === lv.code ? " selected" : "") + ">" + esc(lv.code + " " + lv.name) + "</option>"; }).join("") + "</select></div>" +
+      '<div class="f"><label for="lr2">Outcome</label><select id="lr2" name="outcome"><option value="pass">Pass</option><option value="needs_practice">Needs practice</option></select></div>' +
+      '<div class="f"><label for="lr3">Score % (optional)</label><input id="lr3" name="score" type="number" min="0" max="100"></div>' +
+      '<div class="f wide"><label for="lr4">Note (optional)</label><input id="lr4" name="note"></div></div>' +
+      '<div class="acts" style="margin-top:12px"><button class="btn" type="submit">Save result</button></div></form>' +
+      (past.length ? '<div class="cards" style="margin-top:12px">' + past.map(function (r) { return '<div class="card"><div class="l1"><span class="t">' + esc(r.level_code) + '</span><span class="pill ' + (r.outcome === "pass" ? "ok" : "warn") + '">' + (r.outcome === "pass" ? "Pass" : "Needs practice") + '</span></div><span class="hint">' + esc(String(r.decided_at).slice(0, 10)) + (r.score != null ? " · " + esc(r.score) + "%" : "") + (r.note ? " · " + esc(r.note) : "") + "</span></div>"; }).join("") + "</div>" : "") + "</div>";
   }
 
   /* ---- packages and payments */
@@ -1331,7 +1344,7 @@
     var next = upcoming[0];
     var dueBox = s.payment_due ? '<div class="paydue" role="alert"><b>Payment due</b><span>Your new level' + (s.payment_due_note ? " (" + esc(s.payment_due_note) + ")" : "") + ' has not been paid yet. Please pay by InstaPay and send your receipt to your teacher on WhatsApp so your lessons stay active.</span></div>' : "";
     return '<div style="margin-top:20px;display:grid;gap:22px">' + dueBox +
-      '<div class="sum" style="margin:0"><div><span class="label">Hello</span><b>' + esc(s.full_name.split(" ")[0]) + '</b></div><div><span class="label">Your level</span><b>' + esc(s.cefr || "To be tested") + '</b></div><div><span class="label">Next lesson</span><b style="font-size:17px">' + (next ? esc(fmtDT(next.starts_at)) + "</b><small>Egypt time</small>" + (viewTz() !== EG ? "<small>" + converted(next.starts_at) + "</small>" : "") : "Not scheduled yet</b>") + "</div></div>" +
+      '<div class="sum" style="margin:0"><div><span class="label">Hello</span><b>' + esc(s.full_name.split(" ")[0]) + '</b></div><div><span class="label">Your level</span><b>' + esc(s.level_code || s.cefr || "To be tested") + '</b></div><div><span class="label">Next lesson</span><b style="font-size:17px">' + (next ? esc(fmtDT(next.starts_at)) + "</b><small>Egypt time</small>" + (viewTz() !== EG ? "<small>" + converted(next.starts_at) + "</small>" : "") : "Not scheduled yet</b>") + "</div></div>" +
       studentHomework(s) +
       '<div class="panel"><div class="sec"><h3>Your lessons</h3><div class="f" style="max-width:360px"><label for="vtz">Show lessons in my time zone</label><select id="vtz" data-change="viewtz">' + tzOptions(viewTz()) + '</select></div><p class="hint">Lessons are set in Egypt time.</p><div class="cards">' + (upcoming.concat(past).length ? upcoming.concat(past).map(function (l) {
         return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " Egypt time · " + l.duration_min + ' min</span><span class="pill' + (l.status === "completed" ? " ok" : "") + '">' + esc(LSTATUS[l.status]) + "</span></div>" + (converted(l.starts_at) ? converted(l.starts_at) : "") + lessonFiles(l) +
@@ -1367,11 +1380,11 @@
     };
     return Promise.all([
       admin ? q("cur_levels", "position") : Promise.resolve([]), admin ? q("cur_lessons", "number") : Promise.resolve([]),
-      admin ? q("cur_files", "created_at") : Promise.resolve([]), admin ? q("cur_sources", "position") : Promise.resolve([]), q("assignments", "created_at")
+      admin ? q("cur_files", "created_at") : Promise.resolve([]), admin ? q("cur_sources", "position") : Promise.resolve([]), q("assignments", "created_at"), admin ? q("level_results", "decided_at") : Promise.resolve([])
     ]).then(function (r) {
       S.academicReady = !admin || (r[0] !== null && r[1] !== null && r[2] !== null && r[3] !== null);
       S.cur_levels = r[0] || []; S.cur_lessons = r[1] || []; S.cur_files = r[2] || []; S.cur_sources = r[3] || [];
-      S.assignments = (r[4] || []).slice().sort(function (a, b) { return a.created_at < b.created_at ? 1 : -1; });
+      S.level_results = r[5] || []; S.assignments = (r[4] || []).slice().sort(function (a, b) { return a.created_at < b.created_at ? 1 : -1; });
     });
   }
   function levelOf(l) { return byId(S.cur_levels, l.level_id) || { code: "", position: 1, name: "" }; }
@@ -2178,7 +2191,9 @@
       act(sb.from("students").insert({ full_name: d.full_name, email: nul(d.email), phone: joinPhone(d.dial, d.phone_local), country: nul(d.country), program: nul(d.program), status: d.status, goal: nul(d.goal) }).select().single(), "Student added.")
         .then(function (r) { UI.add = false; return loadAll().then(function () { location.hash = "#/students/" + r.id; render(); }); }).then(done, done);
     } else if (kind === "savestudent") {
-      act(sb.from("students").update({ full_name: d.full_name, email: nul(d.email), phone: joinPhone(d.dial, d.phone_local), country: nul(d.country), program: nul(d.program), cefr: nul(d.cefr), status: d.status, goal: nul(d.goal), payment_due: d.payment_due === "1", payment_due_note: nul(d.payment_due_note) }).eq("id", id), "Saved.").then(refresh).then(done, done);
+      act(sb.from("students").update({ full_name: d.full_name, email: nul(d.email), phone: joinPhone(d.dial, d.phone_local), country: nul(d.country), program: nul(d.program), cefr: nul(d.cefr), level_code: nul(d.level_code), status: d.status, goal: nul(d.goal), payment_due: d.payment_due === "1", payment_due_note: nul(d.payment_due_note) }).eq("id", id), "Saved.").then(refresh).then(done, done);
+    } else if (kind === "levelresult") {
+      act(sb.from("level_results").insert({ student_id: id, level_code: d.level_code, outcome: d.outcome, score: d.score === "" || d.score == null ? null : Number(d.score), note: nul(d.note) }), "Result saved.").then(refresh).then(done, done);
     } else if (kind === "savenote") {
       act(sb.from("student_notes").upsert({ student_id: id, body: d.body, updated_at: new Date().toISOString() }), "Notes saved.").then(refresh).then(done, done);
     } else if (kind === "addpkg") {
