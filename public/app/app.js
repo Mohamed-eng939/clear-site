@@ -578,6 +578,8 @@
       '<div class="f"><label for="d5">Program</label><select id="d5" name="program"><option value="">Not chosen yet</option>' + opt(Object.keys(PRICES), s.program, mapNames()) + "</select></div>" +
       '<div class="f"><label for="d6">Level (CEFR)</label><select id="d6" name="cefr"><option value="">Not tested yet</option>' + opt(CEFR, s.cefr) + "</select></div>" +
       '<div class="f"><label for="d7">Status</label><select id="d7" name="status">' + opt(Object.keys(STATUS), s.status, STATUS) + "</select></div>" +
+      '<div class="f"><label for="d9">Payment due flag</label><select id="d9" name="payment_due"><option value="">No</option><option value="1"' + (s.payment_due ? " selected" : "") + '>Yes: show reminder at top of her account</option></select></div>' +
+      '<div class="f"><label for="d10">What is due (shown to student)</label><input id="d10" name="payment_due_note" placeholder="e.g. Level A1.2" value="' + esc(s.payment_due_note || "") + '"></div>' +
       '<div class="f wide"><label for="d8">Goal</label><textarea id="d8" name="goal">' + esc(s.goal) + "</textarea></div></div>" +
       '<div class="acts" style="margin-top:12px"><button class="btn" type="submit">Save details</button>' + (s.phone ? '<a class="btn sec" href="' + esc(waLink(s.phone)) + '" target="_blank" rel="noopener">Open WhatsApp chat</a>' : "") + "</div></form></div>";
   }
@@ -1327,7 +1329,8 @@
     var pkgs = S.packages.filter(function (p) { return p.student_id === s.id; });
     var pays = S.payments.filter(function (p) { return p.student_id === s.id; });
     var next = upcoming[0];
-    return '<div style="margin-top:20px;display:grid;gap:22px">' +
+    var dueBox = s.payment_due ? '<div class="paydue" role="alert"><b>Payment due</b><span>Your new level' + (s.payment_due_note ? " (" + esc(s.payment_due_note) + ")" : "") + ' has not been paid yet. Please pay by InstaPay and send your receipt to your teacher on WhatsApp so your lessons stay active.</span></div>' : "";
+    return '<div style="margin-top:20px;display:grid;gap:22px">' + dueBox +
       '<div class="sum" style="margin:0"><div><span class="label">Hello</span><b>' + esc(s.full_name.split(" ")[0]) + '</b></div><div><span class="label">Your level</span><b>' + esc(s.cefr || "To be tested") + '</b></div><div><span class="label">Next lesson</span><b style="font-size:17px">' + (next ? esc(fmtDT(next.starts_at)) + "</b><small>Egypt time</small>" + (viewTz() !== EG ? "<small>" + converted(next.starts_at) + "</small>" : "") : "Not scheduled yet</b>") + "</div></div>" +
       studentHomework(s) +
       '<div class="panel"><div class="sec"><h3>Your lessons</h3><div class="f" style="max-width:360px"><label for="vtz">Show lessons in my time zone</label><select id="vtz" data-change="viewtz">' + tzOptions(viewTz()) + '</select></div><p class="hint">Lessons are set in Egypt time.</p><div class="cards">' + (upcoming.concat(past).length ? upcoming.concat(past).map(function (l) {
@@ -2175,7 +2178,7 @@
       act(sb.from("students").insert({ full_name: d.full_name, email: nul(d.email), phone: joinPhone(d.dial, d.phone_local), country: nul(d.country), program: nul(d.program), status: d.status, goal: nul(d.goal) }).select().single(), "Student added.")
         .then(function (r) { UI.add = false; return loadAll().then(function () { location.hash = "#/students/" + r.id; render(); }); }).then(done, done);
     } else if (kind === "savestudent") {
-      act(sb.from("students").update({ full_name: d.full_name, email: nul(d.email), phone: joinPhone(d.dial, d.phone_local), country: nul(d.country), program: nul(d.program), cefr: nul(d.cefr), status: d.status, goal: nul(d.goal) }).eq("id", id), "Saved.").then(refresh).then(done, done);
+      act(sb.from("students").update({ full_name: d.full_name, email: nul(d.email), phone: joinPhone(d.dial, d.phone_local), country: nul(d.country), program: nul(d.program), cefr: nul(d.cefr), status: d.status, goal: nul(d.goal), payment_due: d.payment_due === "1", payment_due_note: nul(d.payment_due_note) }).eq("id", id), "Saved.").then(refresh).then(done, done);
     } else if (kind === "savenote") {
       act(sb.from("student_notes").upsert({ student_id: id, body: d.body, updated_at: new Date().toISOString() }), "Notes saved.").then(refresh).then(done, done);
     } else if (kind === "addpkg") {

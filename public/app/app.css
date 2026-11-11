@@ -246,3 +246,6 @@ pre.sql{margin:0;background:var(--surface);border:1px solid var(--line);border-r
   .pact{width:100%}
 }
 .lr-plan{max-width:420px}
+
+.paydue{display:flex;flex-direction:column;gap:4px;border:1.5px solid var(--warn);border-left-width:6px;background:var(--soft);color:var(--ink);border-radius:var(--rl);padding:14px 16px}
+.paydue b{font:700 15px/1.2 var(--display);color:var(--warn)}
