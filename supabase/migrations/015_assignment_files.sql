@@ -1,0 +1,2 @@
+-- Every file a student sends for a homework item is kept (see applied migration "assignment_files").
+-- Table assignment_files + submit_assignment() now records each upload; existing submissions backfilled.

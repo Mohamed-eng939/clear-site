@@ -219,7 +219,7 @@
 
   /* ------------------------------------------------------------ state */
   var sb = null, session = null, me = null;
-  var S = { students: [], packages: [], payments: [], lessons: [], reports: [], notes: {}, settings: null, materials: [], academicReady: false, cur_levels: [], cur_lessons: [], cur_files: [], cur_sources: [], assignments: [] };
+  var S = { students: [], packages: [], payments: [], lessons: [], reports: [], notes: {}, settings: null, materials: [], academicReady: false, cur_levels: [], cur_lessons: [], cur_files: [], cur_sources: [], afiles: [], assignments: [] };
   var UI = { tab: "link", filter: "all", q: "", add: false, receipts: {}, draft: null, sent: "", sched: null };
   var root = null;
 
@@ -1381,11 +1381,11 @@
     };
     return Promise.all([
       admin ? q("cur_levels", "position") : Promise.resolve([]), admin ? q("cur_lessons", "number") : Promise.resolve([]),
-      admin ? q("cur_files", "created_at") : Promise.resolve([]), admin ? q("cur_sources", "position") : Promise.resolve([]), q("assignments", "created_at"), admin ? q("level_results", "decided_at") : Promise.resolve([])
+      admin ? q("cur_files", "created_at") : Promise.resolve([]), admin ? q("cur_sources", "position") : Promise.resolve([]), q("assignments", "created_at"), admin ? q("level_results", "decided_at") : Promise.resolve([]), q("assignment_files", "created_at")
     ]).then(function (r) {
       S.academicReady = !admin || (r[0] !== null && r[1] !== null && r[2] !== null && r[3] !== null);
       S.cur_levels = r[0] || []; S.cur_lessons = r[1] || []; S.cur_files = r[2] || []; S.cur_sources = r[3] || [];
-      S.level_results = r[5] || []; S.assignments = (r[4] || []).slice().sort(function (a, b) { return a.created_at < b.created_at ? 1 : -1; });
+      S.level_results = r[5] || []; S.afiles = r[6] || []; S.assignments = (r[4] || []).slice().sort(function (a, b) { return a.created_at < b.created_at ? 1 : -1; });
     });
   }
   function levelOf(l) { return byId(S.cur_levels, l.level_id) || { code: "", position: 1, name: "" }; }
@@ -1650,10 +1650,19 @@
   }
 
   /* ---- homework */
+  function afilesOf(a) { return S.afiles.filter(function (f) { return f.assignment_id === a.id; }).sort(function (x, y) { return x.created_at < y.created_at ? -1 : 1; }); }
+  function subFiles(a) {
+    var fs = afilesOf(a);
+    if (!fs.length && a.sub_path) return '<div class="acts"><button type="button" class="btn sec sm" data-act="opensub" data-id="' + a.id + '">Open submitted file: ' + esc(a.sub_name) + "</button></div>";
+    if (!fs.length) return "";
+    return '<div class="acts" style="flex-wrap:wrap">' + fs.map(function (f) {
+      return '<button type="button" class="btn sec sm" data-act="opensubf" data-id="' + f.id + '">Open: ' + esc(f.name) + " (" + esc(String(f.created_at).slice(0, 10)) + ")</button>";
+    }).join("") + "</div>";
+  }
   function hwCard(a) {
     var s = byId(S.students, a.student_id);
     var sub = a.status === "assigned" ? '<p class="hint">Waiting for ' + esc(s ? s.full_name.split(" ")[0] : "the student") + " to submit.</p>" :
-      (a.sub_text ? '<div class="receipt">' + esc(a.sub_text) + "</div>" : "") + (a.sub_path ? '<div class="acts"><button type="button" class="btn sec sm" data-act="opensub" data-id="' + a.id + '">Open submitted file: ' + esc(a.sub_name) + "</button></div>" : "") +
+      (a.sub_text ? '<div class="receipt">' + esc(a.sub_text) + "</div>" : "") + subFiles(a) +
       '<form data-form="hwfeedback" data-id="' + a.id + '"><div class="f"><label for="fb' + a.id + '">Your feedback to the student</label><textarea id="fb' + a.id + '" name="feedback" required>' + esc(a.feedback) + '</textarea></div><div class="acts" style="margin-top:8px"><button class="btn sm" type="submit">' + (a.status === "reviewed" ? "Update feedback" : "Send feedback") + "</button></div></form>";
     return '<div class="card"><div class="l1"><span class="t">' + esc(a.title) + '</span><span class="pills"><span class="pill ' + (a.status === "reviewed" ? "ok" : a.status === "submitted" ? "warn" : "") + '">' + (a.status === "reviewed" ? "Reviewed" : a.status === "submitted" ? "To review" : "Assigned") + "</span>" + (a.due_on ? '<span class="pill">Due ' + esc(a.due_on) + "</span>" : "") + "</span></div>" +
       '<span class="hint"><a href="#/students/' + a.student_id + '">' + esc(studentName(a.student_id)) + "</a>" + (a.submitted_at ? " · submitted " + esc(a.submitted_at.slice(0, 10)) : "") + "</span>" +
@@ -1925,6 +1934,7 @@
       return '<div class="card"><div class="l1"><span class="t">' + esc(a.title) + '</span><span class="pills"><span class="pill ' + (a.status === "reviewed" ? "ok" : a.status === "submitted" ? "warn" : "") + '">' + (a.status === "reviewed" ? "Feedback ready" : a.status === "submitted" ? "Sent, waiting for feedback" : "To do") + "</span>" + (a.due_on ? '<span class="pill">Due ' + esc(a.due_on) + "</span>" : "") + "</span></div>" +
         (a.instructions ? "<p>" + esc(a.instructions) + "</p>" : "") +
         (a.status === "reviewed" && a.feedback ? '<div class="receipt"><b>Feedback from your teacher</b>\n' + esc(a.feedback) + "</div>" : "") +
+        (afilesOf(a).length ? '<span class="hint">Files you sent: ' + afilesOf(a).map(function (f) { return esc(f.name); }).join(", ") + "</span>" : "") +
         (a.sub_text && a.status !== "assigned" ? '<span class="hint">Your answer: ' + esc(a.sub_text.length > 140 ? a.sub_text.slice(0, 140) + "…" : a.sub_text) + "</span>" : "") +
         (open ? '<form data-form="submithw" data-id="' + a.id + '" class="addbox"><div class="f"><label for="h' + a.id + '">' + (a.status === "submitted" ? "Change your answer" : "Your answer") + '</label><textarea id="h' + a.id + '" name="text">' + esc(a.status === "submitted" ? a.sub_text : "") + '</textarea></div>' +
           '<div class="f"><label for="hf' + a.id + '">Or attach a file or recording (optional)</label><input id="hf' + a.id + '" name="file" type="file" accept="' + FILE_ACCEPT + '"><span class="hint">Up to 50 MB.</span></div><div class="acts"><button class="btn" type="submit">' + (a.status === "submitted" ? "Send again" : "Send to my teacher") + "</button></div></form>" : "") + "</div>";
@@ -1974,10 +1984,11 @@
       if (!ok) return; var f2 = byId(S.cur_files, id); if (!f2) return;
       sb.storage.from("materials").remove([f2.file_path]).then(function () { return act(sb.from("cur_files").delete().eq("id", id), "File deleted."); }).then(refresh).catch(function (e) { toast(e.message || "Could not delete.", true); });
     }); return true; }
+    if (a === "opensubf") { var sf = byId(S.afiles, id); if (sf) openStored(sf.path, sf.name, sf.mime); return true; }
     if (a === "opensub") { var x = byId(S.assignments, id); if (x && x.sub_path) openStored(x.sub_path, x.sub_name, x.sub_mime); return true; }
     if (a === "delhw") { ask("Delete this homework and any answer the student sent?", "Delete").then(function (ok) {
       if (!ok) return; var h = byId(S.assignments, id);
-      Promise.resolve(h && h.sub_path ? sb.storage.from("materials").remove([h.sub_path]) : null).then(function () { return act(sb.from("assignments").delete().eq("id", id), "Homework deleted."); }).then(refresh);
+      Promise.resolve((function () { var ps = h ? afilesOf(h).map(function (f) { return f.path; }) : []; if (h && h.sub_path && ps.indexOf(h.sub_path) < 0) ps.push(h.sub_path); return ps.length ? sb.storage.from("materials").remove(ps) : null; })()).then(function () { return act(sb.from("assignments").delete().eq("id", id), "Homework deleted."); }).then(refresh);
     }); return true; }
     if (a === "delsrc") { ask("Delete this source from the list?", "Delete").then(function (ok) { if (ok) act(sb.from("cur_sources").delete().eq("id", id), "Source deleted.").then(refresh); }); return true; }
     if (a === "newcp") { newCheckpoint(id, v); return true; }
@@ -2163,7 +2174,9 @@
     if (a === "delstudent") return ask("Delete this student with all packages, payments, lessons and reports? This cannot be undone.", "Delete student").then(function (ok) {
       if (!ok) return;
       var paths = S.materials.filter(function (m) { return m.student_id === id; }).map(function (m) { return m.file_path; })
-        .concat(S.assignments.filter(function (x) { return x.student_id === id && x.sub_path; }).map(function (x) { return x.sub_path; }));
+        .concat(S.assignments.filter(function (x) { return x.student_id === id && x.sub_path; }).map(function (x) { return x.sub_path; }))
+        .concat(S.afiles.filter(function (f) { return f.student_id === id; }).map(function (f) { return f.path; }));
+      paths = paths.filter(function (x, i) { return paths.indexOf(x) === i; });
       Promise.resolve(paths.length ? sb.storage.from("materials").remove(paths) : null).then(function () { return act(sb.from("students").delete().eq("id", id), "Student deleted."); }).then(function () { location.hash = "#/students"; return refresh(); });
     });
   }
