@@ -1628,11 +1628,62 @@
   }
 
   /* ---- schedule */
+  var CAL_DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function dowOfKey(k) { return new Date(k + "T00:00:00Z").getUTCDay(); }
+  function schedView() { if (UI.schedView) return UI.schedView; var v = "list"; try { v = localStorage.getItem("clear-schedview") || "list"; } catch (e) { /* storage blocked */ } return UI.schedView = (v === "week" || v === "month") ? v : "list"; }
+  function schedTeachers() { return window.CLEAR_TC && window.CLEAR_TC.teachersList ? window.CLEAR_TC.teachersList() : []; }
+  function schedFilter(list) { var f = UI.schedTeacher || "all"; return list.filter(function (l) { return f === "all" || (f === "none" ? !l.teacher_id : l.teacher_id === f); }); }
+  function schedToolbar() {
+    var v = schedView(), ts = schedTeachers();
+    return '<div class="acts noprint" style="flex-wrap:wrap;align-items:flex-end;margin:0 0 14px"><div class="tabs" role="group" aria-label="Schedule view">' +
+      [["list", "List"], ["week", "Week"], ["month", "Month"]].map(function (x) { return '<button type="button" data-act="calview" data-v="' + x[0] + '" aria-pressed="' + (v === x[0]) + '">' + x[1] + "</button>"; }).join("") + "</div>" +
+      (ts.length ? '<div class="f" style="min-width:200px"><label for="calt">Teacher</label><select id="calt" data-change="calteacher"><option value="all">All teachers</option><option value="none"' + (UI.schedTeacher === "none" ? " selected" : "") + ">No teacher yet</option>" +
+        ts.map(function (t) { return '<option value="' + t.id + '"' + (UI.schedTeacher === t.id ? " selected" : "") + ">" + esc(t.full_name) + "</option>"; }).join("") + "</select></div>" : "") + "</div>";
+  }
+  function schedCard(l) {
+    var cl = l.cur_lesson_id ? byId(S.cur_lessons, l.cur_lesson_id) : null;
+    return '<div class="card" style="margin-top:12px"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " · " + esc(studentName(l.student_id)) + '</span><span class="pills"><span class="pill ' + (l.status === "completed" ? "ok" : "") + '">' + esc(LSTATUS[l.status] || l.status) + "</span>" +
+      (cl ? '<span class="pill ' + (cl.status === "ready" ? "ok" : "warn") + '">' + esc(CSTATUS[cl.status]) + "</span>" : '<span class="pill warn">No plan linked</span>') + "</span></div>" +
+      '<div class="fields"><div class="f"><label for="sc_a' + l.id + '">Attendance</label><select id="sc_a' + l.id + '" data-change="attend" data-id="' + l.id + '">' + opt(Object.keys(LSTATUS), l.status, LSTATUS) + "</select></div>" +
+      '<div class="f"><label for="sc_l' + l.id + '">Lesson in the plan</label><select id="sc_l' + l.id + '" data-change="lcur" data-id="' + l.id + '">' + curOptions(l.cur_lesson_id) + "</select></div>" +
+      (window.CLEAR_TC ? window.CLEAR_TC.lessonTeacherSelect(l) : "") + "</div>" +
+      (cl ? '<div class="acts"><button type="button" class="btn sec sm" data-act="aclesson" data-id="' + cl.id + '">Open lesson kit</button></div>' : "") + "</div>";
+  }
+  function schedCalendar(mode) {
+    var today = dayKey(new Date().toISOString()), anchor = UI.calAnchor || today, start, n, title, first;
+    if (mode === "week") { start = addDays(anchor, -dowOfKey(anchor)); n = 7; title = "Week of " + new Date(start + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" }); }
+    else {
+      first = anchor.slice(0, 8) + "01"; start = addDays(first, -dowOfKey(first));
+      var dim = new Date(Date.UTC(+anchor.slice(0, 4), +anchor.slice(5, 7), 0)).getUTCDate(); n = Math.ceil((dowOfKey(first) + dim) / 7) * 7;
+      title = new Date(first + "T00:00:00Z").toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+    }
+    var byDay = {}; schedFilter(S.lessons).forEach(function (l) { (byDay[dayKey(l.starts_at)] = byDay[dayKey(l.starts_at)] || []).push(l); });
+    Object.keys(byDay).forEach(function (k) { byDay[k].sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; }); });
+    var cells = "";
+    for (var i = 0; i < n; i++) {
+      var k = addDays(start, i), ls = byDay[k] || [], other = mode === "month" && k.slice(0, 7) !== anchor.slice(0, 7);
+      var lab = mode === "week" ? CAL_DOW[dowOfKey(k)] + " " + +k.slice(8) : "" + +k.slice(8);
+      cells += '<div class="cell' + (k === today ? " today" : "") + (other ? " other" : "") + '"><button type="button" class="dn" data-act="calday" data-v="' + k + '" aria-label="Open week of ' + k + '">' + lab + "</button>" +
+        ls.map(function (l) {
+          var tn = l.teacher_id && window.CLEAR_TC && window.CLEAR_TC.teacherName ? window.CLEAR_TC.teacherName(l.teacher_id) : "";
+          return '<button type="button" class="calchip ' + esc(l.status) + (UI.schedSel === l.id ? " sel" : "") + '" data-act="calsel" data-id="' + l.id + '" title="' + esc(fmtDT(l.starts_at) + " · " + studentName(l.student_id) + (tn ? " · " + tn : "")) + '">' + esc(fmtTime(l.starts_at).replace(" ", "")) + " " + esc(studentName(l.student_id).split(" ")[0]) + (tn && mode === "week" ? " · " + esc(tn.split(" ")[0]) : "") + "</button>";
+        }).join("") + "</div>";
+    }
+    var sel = UI.schedSel ? byId(S.lessons, UI.schedSel) : null;
+    return '<div class="acts noprint" style="justify-content:space-between;align-items:center"><div class="acts"><button type="button" class="btn sec sm" data-act="calnav" data-v="prev" aria-label="Previous">&larr;</button><button type="button" class="btn sec sm" data-act="calnav" data-v="today">Today</button><button type="button" class="btn sec sm" data-act="calnav" data-v="next" aria-label="Next">&rarr;</button></div><b>' + esc(title) + "</b></div>" +
+      '<div class="cal ' + mode + '" style="margin-top:10px">' + CAL_DOW.map(function (d) { return '<div class="dh">' + d + "</div>"; }).join("") + cells + "</div>" +
+      (sel ? schedCard(sel) : '<p class="hint">Click a lesson to change its attendance, plan lesson or teacher.</p>');
+  }
   function acSchedule() {
+    var v = schedView();
+    if (v === "week" || v === "month") return schedToolbar() + schedCalendar(v);
+    return schedToolbar() + acScheduleList();
+  }
+  function acScheduleList() {
     var from = new Date(); from.setHours(0, 0, 0, 0);
-    var up = S.lessons.filter(function (l) { return l.status === "scheduled" && new Date(l.starts_at) >= from; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
+    var up = schedFilter(S.lessons).filter(function (l) { return l.status === "scheduled" && new Date(l.starts_at) >= from; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
     var nowD = new Date();
-    var past = S.lessons.filter(function (l) { return l.status !== "scheduled" || new Date(l.starts_at) < from; }).filter(function (l) { return !(l.status === "scheduled" && new Date(l.starts_at) >= from); }).sort(function (a, b) { return a.starts_at < b.starts_at ? 1 : -1; });
+    var past = schedFilter(S.lessons).filter(function (l) { return l.status !== "scheduled" || new Date(l.starts_at) < from; }).filter(function (l) { return !(l.status === "scheduled" && new Date(l.starts_at) >= from); }).sort(function (a, b) { return a.starts_at < b.starts_at ? 1 : -1; });
     var pastHtml = past.length ? '<div class="day" style="margin-top:22px">Previous lessons: did she attend?</div>' + past.map(function (l) {
       var cl = l.cur_lesson_id ? byId(S.cur_lessons, l.cur_lesson_id) : null, pending = l.status === "scheduled";
       return '<div class="card" style="margin-bottom:8px"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " · " + esc(studentName(l.student_id)) + '</span><span class="pills"><span class="pill ' + (l.status === "completed" ? "ok" : pending ? "warn" : "") + '">' + (pending ? "Not marked yet" : l.status === "completed" ? "Attended" : esc(LSTATUS[l.status])) + "</span></span></div>" +
@@ -1966,6 +2017,16 @@
   /* ---- Clear Academic: events */
   function academicClick(a, id, v) {
     if (a === "actab") { location.hash = "#/academic/" + v; return true; }
+    if (a === "calview") { UI.schedView = v; try { localStorage.setItem("clear-schedview", v); } catch (e) { /* storage blocked */ } render(); return true; }
+    if (a === "calsel") { UI.schedSel = UI.schedSel === id ? null : id; render(); return true; }
+    if (a === "calday") { UI.calAnchor = v; UI.schedView = "week"; try { localStorage.setItem("clear-schedview", "week"); } catch (e) { /* storage blocked */ } render(); return true; }
+    if (a === "calnav") {
+      var anc = UI.calAnchor || dayKey(new Date().toISOString());
+      if (v === "today") UI.calAnchor = null;
+      else if (schedView() === "week") UI.calAnchor = addDays(anc, v === "next" ? 7 : -7);
+      else { var y = +anc.slice(0, 4), m = +anc.slice(5, 7) + (v === "next" ? 1 : -1); if (m > 12) { m = 1; y++; } if (m < 1) { m = 12; y--; } UI.calAnchor = y + "-" + (m < 10 ? "0" : "") + m + "-01"; }
+      render(); return true;
+    }
     if (a === "aclesson") { location.hash = "#/academic/lesson/" + id; return true; }
     if (a === "curblueprint") {
       var ta = $("#c_plan"); if (!ta) return true;
@@ -2000,6 +2061,7 @@
   }
   function academicChange(t, ch) {
     if (ch === "importpick") { importPick(t); return true; }
+    if (ch === "calteacher") { UI.schedTeacher = t.value; render(); return true; }
     if (ch === "curstatus") {
       act(sb.from("cur_lessons").update({ status: t.value, updated_at: new Date().toISOString() }).eq("id", t.getAttribute("data-id")).select("id")).then(function (rows) {
         if (!rows || !rows.length) { toast("Nothing was saved. Refresh and sign in again.", true); } else toast("Status saved: " + CSTATUS[t.value] + ".");
@@ -2302,6 +2364,6 @@
   /* ------------------------------------------------------------ start */
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
   window.__clear = { esc: esc, priceFor: priceFor, role: function () { return me && me.role; }, api: function () {
-    return { sb: sb, esc: esc, toast: toast, role: function () { return me && me.role; }, act: act, ask: ask, unwrap: unwrap, fmtDT: fmtDT, render: render, refresh: refresh, nul: nul, logo: logo, cfgUrl: function () { return window.CLEAR_CONFIG.url; } };
+    return { sb: sb, esc: esc, toast: toast, role: function () { return me && me.role; }, zonedToMs: zonedToMs, addDays: addDays, EG: EG, dayKey: dayKey, activePackage: activePackage, lessonsList: function () { return S.lessons; }, act: act, ask: ask, unwrap: unwrap, fmtDT: fmtDT, render: render, refresh: refresh, nul: nul, logo: logo, cfgUrl: function () { return window.CLEAR_CONFIG.url; } };
   } };
 })();

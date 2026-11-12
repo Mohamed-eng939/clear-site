@@ -249,3 +249,18 @@ pre.sql{margin:0;background:var(--surface);border:1px solid var(--line);border-r
 
 .paydue{display:flex;flex-direction:column;gap:4px;border:1.5px solid var(--warn);border-left-width:6px;background:var(--soft);color:var(--ink);border-radius:var(--rl);padding:14px 16px}
 .paydue b{font:700 15px/1.2 var(--display);color:var(--warn)}
+
+/* schedule calendar */
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.cal .dh{font-size:.75rem;color:var(--ink-soft);text-align:center;padding:4px 0;font-weight:600}
+.cal .cell{min-height:92px;border:1px solid var(--line);border-radius:8px;padding:4px;background:var(--surface);display:flex;flex-direction:column;gap:3px;min-width:0}
+.cal.week .cell{min-height:170px}
+.cal .cell.other{background:var(--soft);opacity:.65}
+.cal .cell.today{border:2px solid var(--brand)}
+.cal .dn{font:700 .75rem/1.2 var(--display);background:none;border:0;text-align:left;color:var(--ink);cursor:pointer;padding:2px}
+.calchip{font:600 .72rem/1.25 var(--body,inherit);text-align:left;border:1.5px solid var(--line-strong);border-radius:6px;padding:2px 4px;background:var(--soft);color:var(--ink);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%}
+.calchip.completed{border-color:var(--positive)}
+.calchip.scheduled{border-color:var(--action)}
+.calchip.no_show,.calchip.late_cancel,.calchip.moved{opacity:.7;text-decoration:line-through}
+.calchip.sel{outline:3px solid var(--focus)}
+@media (max-width:720px){.cal.week{grid-template-columns:1fr}.cal.week .dh{display:none}.cal .cell{min-height:60px}.cal.week .cell{min-height:0}.calchip{font-size:.66rem}}

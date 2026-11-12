@@ -179,6 +179,14 @@
     // schedule
     h += '<div class="sec"><h3>Schedule: next 14 days</h3>' + (upcoming.map(function (l) { return lessonCard(l, false); }).join("") || '<p class="hint">No lessons scheduled for this teacher. Give them lessons by assigning a student, or pick the teacher on a lesson in the Lessons tab.</p>') +
       (lost.length ? '<p class="hint" style="color:var(--warn)">' + lost.length + " past lesson" + (lost.length > 1 ? "s" : "") + " not marked by the teacher yet.</p>" : "") + "</div>";
+    // booking
+    h += '<div class="sec"><h3>Book lessons for a student</h3>' + (links.length ? '<form data-form="tc_book" data-id="' + id + '" class="addbox"><div class="fields">' +
+      fld("bk1", "Student", '<select id="bk1" name="student_id">' + links.map(function (l) { return '<option value="' + l.student_id + '">' + E(studentName(l.student_id)) + "</option>"; }).join("") + "</select>") +
+      fld("bk2", "Teacher slot", '<select id="bk2" name="slot">' + slots.map(function (sl) { return '<option value="' + sl.id + '">' + E(DOW[sl.dow]) + " " + E(String(sl.start_time).slice(0, 5)) + " (" + sl.duration_min + " min)</option>"; }).join("") + '<option value="custom">Another time</option></select>') +
+      fld("bk3", "From date (first lesson falls on the slot's day)", inp("bk3", "from", "", "date", " required")) +
+      fld("bk4", "Weeks (one lesson each week)", inp("bk4", "weeks", 4, "number", ' min="1" max="12"')) +
+      fld("bk5", "Time, only for \"Another time\" (Egypt)", inp("bk5", "time", "21:00", "time")) + fld("bk6", "Minutes, only for \"Another time\"", inp("bk6", "duration", 60, "number", ' min="15" max="240" step="5"')) +
+      '</div><div class="acts"><button class="btn" type="submit">Book lessons</button></div></form><p class="hint">Times are Egypt time. Lessons already booked at the same time are skipped. They use the student\'s current package.</p>' : '<p class="hint">Assign a student first.</p>') + "</div>";
     // availability
     h += '<div class="sec"><h3>Weekly availability (Egypt time)</h3><div class="cards">' + (slots.map(function (s) {
       return '<div class="card"><div class="l1"><span class="t">' + E(DOW[s.dow]) + " " + E(String(s.start_time).slice(0, 5)) + " · " + E(s.duration_min) + ' min</span><button type="button" class="btn danger sm" data-act="tc_delslot" data-id="' + s.id + '">Delete</button></div>' + (s.note ? '<span class="hint">' + E(s.note) + "</span>" : "") + "</div>";
@@ -303,6 +311,7 @@
         return sb.from("lessons").update({ teacher_id: id }).eq("student_id", d.student_id).eq("status", "scheduled").gte("starts_at", new Date().toISOString());
       }).then(reload).then(done, done); return true;
     }
+    if (kind === "tc_book") { book(id, d, done); return true; }
     if (kind === "tc_slot") { after(sb.from("teacher_slots").insert({ teacher_id: id, dow: Number(d.dow), start_time: d.start_time, duration_min: Number(d.duration_min) || 60, note: nz(d.note) }), "Slot added.", done); return true; }
     if (kind === "tc_req") { after(sb.from("teacher_requests").update({ status: d.status, admin_reply: nz(d.admin_reply), decided_at: d.status === "open" ? null : new Date().toISOString() }).eq("id", id), "Saved.", done); return true; }
     if (kind === "tc_warn") { after(sb.from("teacher_warnings").insert({ teacher_id: id, level: d.level, reason: d.reason, issued_on: d.issued_on || new Date().toISOString().slice(0, 10) }), "Warning recorded.", done); return true; }
@@ -313,6 +322,28 @@
     if (kind === "tc_send") { rpc("teacher_send_request", { p_kind: d.kind, p_subject: d.subject, p_body: d.body || null, p_from: nz(d.date_from), p_to: nz(d.date_to) }, "Sent to the academy.", done); return true; }
     return false;
   }
+  function dowOfKey(k) { return new Date(k + "T00:00:00Z").getUTCDay(); }
+  function book(tid, d, done) {
+    var a = A(), sb = a.sb, slot = d.slot && d.slot !== "custom" ? byId(T.slots, d.slot) : null;
+    var time = slot ? String(slot.start_time).slice(0, 5) : d.time, dur = slot ? slot.duration_min : (Number(d.duration) || 60);
+    if (!d.from || !time || !d.student_id) { a.toast("Choose a student, a date and a time.", true); return done(); }
+    var first = d.from, k = 0;
+    if (slot) while (dowOfKey(first) !== slot.dow && k < 7) { first = a.addDays(first, 1); k++; }
+    var weeks = Math.max(1, Math.min(12, Number(d.weeks) || 1)), exist = a.lessonsList().concat(T.lessons), pkg = a.activePackage(d.student_id), rows = [], skipped = 0;
+    for (var i = 0; i < weeks; i++) {
+      var ms = a.zonedToMs(a.addDays(first, 7 * i), time, a.EG);
+      var clash = exist.some(function (l) { return l.status === "scheduled" && new Date(l.starts_at).getTime() === ms && (l.student_id === d.student_id || l.teacher_id === tid); });
+      if (clash) skipped++; else rows.push({ student_id: d.student_id, teacher_id: tid, package_id: pkg ? pkg.id : null, starts_at: new Date(ms).toISOString(), duration_min: dur });
+    }
+    if (!rows.length) { a.toast("Those times are already booked.", true); return done(); }
+    Promise.resolve(sb.from("lessons").insert(rows).select("id")).then(function (r) {
+      if (r.error) throw new Error(r.error.message);
+      if (pkg && !pkg.starts_on) { var day = rows[0].starts_at; return sb.from("packages").update({ starts_on: a.dayKey(day), expires_on: a.addDays(a.dayKey(day), 70) }).eq("id", pkg.id); }
+    }).then(function () {
+      a.toast("Booked " + rows.length + " lesson" + (rows.length > 1 ? "s" : "") + (skipped ? " (" + skipped + " already booked)" : "") + (pkg ? "." : ". The student has no package yet, so they are not counted against one."));
+      reload(); return a.refresh();
+    }).catch(function (e) { a.toast(e.message || "Could not book.", true); }).then(done, done);
+  }
   function change(t, ch) {
     if (ch === "lteacher") {
       var tid = t.value || null;
@@ -322,5 +353,5 @@
     return false;
   }
 
-  window.CLEAR_TC = { view: view, portal: portal, click: click, submit: submit, change: change, badge: badge, ensure: function () { load(); }, lessonTeacherSelect: lessonTeacherSelect, reset: function () { T.loaded = false; T.loading = false; } };
+  window.CLEAR_TC = { teachersList: function () { return T.teachers.filter(function (t) { return t.status !== "ended"; }); }, teacherName: function (id) { var t = byId(T.teachers, id); return t ? t.full_name : ""; }, view: view, portal: portal, click: click, submit: submit, change: change, badge: badge, ensure: function () { load(); }, lessonTeacherSelect: lessonTeacherSelect, reset: function () { T.loaded = false; T.loading = false; } };
 })();
