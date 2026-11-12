@@ -309,12 +309,14 @@
   function enter() {
     root.innerHTML = '<p class="hint" style="padding:40px 0">Loading…</p>';
     return sb.rpc("claim_student").then(function () { return null; }, function () { return null; })
+      .then(function () { return sb.rpc("claim_teacher").then(function () { return null; }, function () { return null; }); })
       .then(function () { return sb.from("profiles").select("role,full_name").eq("id", session.user.id).maybeSingle(); })
       .then(function (r) {
         var p = unwrap(r); me = { id: session.user.id, email: session.user.email, role: p ? p.role : "student", name: p ? p.full_name : "" };
         return loadAll();
       }).then(function () {
         if (!location.hash || location.hash === "#") location.hash = me.role === "admin" ? "#/students" : "#/me";
+        if (window.CLEAR_TC) { window.CLEAR_TC.reset(); if (me.role === "admin" || me.role === "teacher") window.CLEAR_TC.ensure(); }
         render();
       }).catch(function (e) { toast(e.message, true); renderAuth(e.message); });
   }
@@ -355,9 +357,9 @@
   function shell(inner, current) {
     var admin = me.role === "admin";
     var nav = admin
-      ? [["today", "Today"], ["students", "Students"], ["lessons", "Lessons"], ["academic", "Clear Academic"], ["placement", "Placement"], ["payments", "Payments"], ["account", "Account"]]
-      : [["me", "My learning"]];
-    return '<header class="top"><div class="who">' + logo() + '<span class="label">' + (admin ? "Admin" : "Student") + "</span></div>" +
+      ? [["today", "Today"], ["students", "Students"], ["teachers", "Teachers" + (window.CLEAR_TC && window.CLEAR_TC.badge() ? " (" + window.CLEAR_TC.badge() + ")" : "")], ["lessons", "Lessons"], ["academic", "Clear Academic"], ["placement", "Placement"], ["payments", "Payments"], ["account", "Account"]]
+      : me.role === "teacher" ? [["me", "My teaching"]] : [["me", "My learning"]];
+    return '<header class="top"><div class="who">' + logo() + '<span class="label">' + (admin ? "Admin" : me.role === "teacher" ? "Teacher" : "Student") + "</span></div>" +
       '<div class="right"><span class="hint">' + esc(me.email) + '</span><button type="button" class="iconbtn" data-act="theme" aria-label="Switch to ' + (theme() === "dark" ? "light" : "dark") + ' mode">' + (theme() === "dark" ? "&#9728;" : "&#9790;") + '</button><button type="button" class="btn sec sm" data-act="signout">Sign out</button></div></header>' +
       '<nav class="nav" aria-label="Sections">' + nav.map(function (n) {
         return '<button type="button" data-act="go" data-v="' + n[0] + '"' + (current === n[0] ? ' aria-current="page"' : "") + ">" + n[1] + "</button>";
@@ -366,10 +368,12 @@
   function render() {
     if (!me) return renderAuth();
     var r = route();
+    if (me.role === "teacher" && window.CLEAR_TC) { root.innerHTML = shell(window.CLEAR_TC.portal(), "me"); return; }
     if (me.role !== "admin") { root.innerHTML = shell(r.name === "receipt" && r.a ? viewReceipt(r.a) : viewMe(), "me"); return; }
     var html;
     if (r.name === "" || r.name === "today") html = shell(viewToday(), "today");
     else if (r.name === "lessons") html = shell(viewLessons(), "lessons");
+    else if (r.name === "teachers" && window.CLEAR_TC) html = shell(window.CLEAR_TC.view(r), "teachers");
     else if (r.name === "academic") html = shell(viewAcademic(r.a || "plan", r.b), "academic");
     else if (r.name === "placement" && window.CLEAR_PL) html = shell(window.CLEAR_PL.view(r), "placement");
     else if (r.name === "payments") html = shell(viewPayments(), "payments");
@@ -848,7 +852,7 @@
     var head = '<div class="lr-h"><button type="button" class="lr-t" data-act="fold" data-v="l' + l.id + '" aria-expanded="' + open + '"><b>' + esc(fmtDT(l.starts_at)) + '</b><span class="sub">' + esc(l.topic || (cl ? cl.title : "No topic yet")) + " · " + l.duration_min + " min &middot; " + (open ? "close" : "edit") + '</span></button><span class="pills">' +
       (passed ? '<span class="pill warn">Needs marking</span>' : '<span class="pill' + cls + '">' + esc(LSTATUS[l.status] || l.status) + "</span>") + (nf ? '<span class="pill">' + nf + (nf === 1 ? " file" : " files") + "</span>" : "") + "</span></div>";
     var mark = passed ? '<div class="acts"><button type="button" class="btn sm" data-act="lmark" data-id="' + l.id + '" data-v="completed">Mark completed</button><button type="button" class="btn sec sm" data-act="lmark" data-id="' + l.id + '" data-v="no_show">No-show</button><button type="button" class="btn sec sm" data-act="lmark" data-id="' + l.id + '" data-v="moved">Moved</button></div>' : "";
-    var body = open ? '<div class="lr-b"><div class="f" style="max-width:260px"><label for="ls_' + l.id + '">Status</label><select id="ls_' + l.id + '" data-change="lstatus" data-id="' + l.id + '">' + opt(Object.keys(LSTATUS), l.status, LSTATUS) + "</select></div>" + lessonFiles(l) +
+    var body = open ? '<div class="lr-b"><div class="f" style="max-width:260px"><label for="ls_' + l.id + '">Status</label><select id="ls_' + l.id + '" data-change="lstatus" data-id="' + l.id + '">' + opt(Object.keys(LSTATUS), l.status, LSTATUS) + "</select></div>" + lessonFiles(l) + (window.CLEAR_TC ? window.CLEAR_TC.lessonTeacherSelect(l) : "") +
       '<form data-form="savelesson" data-id="' + l.id + '"><div class="fields"><div class="f"><label for="lt' + l.id + '">Topic</label><input id="lt' + l.id + '" name="topic" value="' + esc(l.topic) + '"></div>' +
       '<div class="f"><label for="lm' + l.id + '">Meeting link</label><input id="lm' + l.id + '" name="meeting_url" type="url" value="' + esc(l.meeting_url) + '"></div>' +
       '<div class="f wide"><label for="lsu' + l.id + '">Note the student will see</label><textarea id="lsu' + l.id + '" name="summary">' + esc(l.summary) + "</textarea></div></div>" +
@@ -2064,6 +2068,7 @@
     if (ch === "paytoday") { UI.payToday = t.checked; return render(); }
     if (liveSchedule(e)) return;
     if (window.CLEAR_PL && window.CLEAR_PL.change(t, ch)) return;
+    if (window.CLEAR_TC && window.CLEAR_TC.change(t, ch)) return;
     if (academicChange(t, ch)) return;
     if (ch === "viewtz") { UI.viewTz = t.value; try { localStorage.setItem("clear-viewtz", t.value); } catch (e) { /* storage blocked */ } return render(); }
     if (ch === "schedpkg") {
@@ -2106,6 +2111,7 @@
     var b = e.target.closest("[data-act]"); if (!b) return;
     var a = b.getAttribute("data-act"), id = b.getAttribute("data-id"), v = b.getAttribute("data-v");
     if (window.CLEAR_PL && window.CLEAR_PL.click(a, id, v, b)) return;
+    if (window.CLEAR_TC && window.CLEAR_TC.click(a, id, v, b)) return;
     if (academicClick(a, id, v)) return;
     if (a === "lmark") {
       var ll = byId(S.lessons, id);
@@ -2200,6 +2206,7 @@
     if (btn) btn.disabled = true;
     var done = function () { if (btn) btn.disabled = false; };
     if (window.CLEAR_PL && window.CLEAR_PL.submit(kind, id, d, done, form)) return;
+    if (window.CLEAR_TC && window.CLEAR_TC.submit(kind, id, d, done, form)) return;
     if (academicSubmit(kind, id, d, done)) return;
     if (kind === "addstudent") {
       act(sb.from("students").insert({ full_name: d.full_name, email: nul(d.email), phone: joinPhone(d.dial, d.phone_local), country: nul(d.country), program: nul(d.program), status: d.status, goal: nul(d.goal) }).select().single(), "Student added.")
@@ -2294,7 +2301,7 @@
 
   /* ------------------------------------------------------------ start */
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
-  window.__clear = { esc: esc, priceFor: priceFor, api: function () {
-    return { sb: sb, esc: esc, toast: toast, act: act, ask: ask, unwrap: unwrap, fmtDT: fmtDT, render: render, refresh: refresh, nul: nul, logo: logo, cfgUrl: function () { return window.CLEAR_CONFIG.url; } };
+  window.__clear = { esc: esc, priceFor: priceFor, role: function () { return me && me.role; }, api: function () {
+    return { sb: sb, esc: esc, toast: toast, role: function () { return me && me.role; }, act: act, ask: ask, unwrap: unwrap, fmtDT: fmtDT, render: render, refresh: refresh, nul: nul, logo: logo, cfgUrl: function () { return window.CLEAR_CONFIG.url; } };
   } };
 })();
