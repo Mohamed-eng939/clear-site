@@ -44,7 +44,8 @@
     doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", txt: "text/plain",
     png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif",
-    mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", mp4: "video/mp4"
+    mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", mp4: "video/mp4",
+    opus: "audio/ogg", ogg: "audio/ogg", aac: "audio/aac", amr: "audio/amr", webm: "audio/webm"
   };
   var FILE_ACCEPT = Object.keys(EXT_MIME).map(function (e) { return "." + e; }).join(",");
   var DOWS = [[1, "Monday"], [2, "Tuesday"], [3, "Wednesday"], [4, "Thursday"], [5, "Friday"], [6, "Saturday"], [0, "Sunday"]];
