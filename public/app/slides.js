@@ -27,8 +27,8 @@
   function load(force) {
     if (SL.loading || (SL.loaded && !force)) return;
     SL.loading = true;
-    A().sb.from("decks").select("id,cur_lesson_id,title,visible_to_students,updated_at").order("created_at").then(function (r) {
-      SL.decks = (r && r.data) || []; SL.loaded = true; SL.loading = false;
+    A().sb.from("decks").select("id,cur_lesson_id,title,visible_to_students,updated_at,source_file_id").order("created_at").then(function (r) {
+      SL.decks = (r && r.data) || []; SL.loaded = true; SL.loading = false; setTimeout(doSweep, 300);
       var h = location.hash; if (A().render && !SL.cur && !SL.show) A().render();
     }, function () { SL.loading = false; SL.loaded = true; });
   }
@@ -518,6 +518,14 @@
     return '<div class="sec"><h3>Your slides</h3><p class="hint">Open the slides on any device and use Slide show to present. Click or press the right arrow to move on.</p><div class="cards">' + SL.decks.map(function (d) { return deckCard(d, false); }).join("") + "</div></div>";
   }
   function click(a, id) {
+    if (a === "sl_pptx") {
+      var ex = SL.decks.filter(function (x) { return x.source_file_id === id; })[0];
+      if (ex) { open(ex.id, "view"); return true; }
+      A().sb.from("cur_files").select("*").eq("id", id).maybeSingle().then(function (r) {
+        if (!r.data) { toast("Could not read that file.", true); return; }
+        fileToDeck(r.data).then(function (d) { if (d) open(d.id, "view"); });
+      }); return true;
+    }
     if (a === "sl_view") { open(id, "view"); return true; }
     if (a === "sl_show") { open(id, "show"); return true; }
     if (a === "sl_edit") { open(id, "edit"); return true; }
@@ -531,7 +539,7 @@
     if (a === "sl_new") {
       var title = window.prompt("Name for the new deck", "New slides"); if (!title) return true;
       var s = blankSlide(title);
-      A().sb.from("decks").insert({ cur_lesson_id: id, title: title, slides: [s] }).select("id,cur_lesson_id,title,visible_to_students,updated_at").single().then(function (r) {
+      A().sb.from("decks").insert({ cur_lesson_id: id, title: title, slides: [s] }).select("id,cur_lesson_id,title,visible_to_students,updated_at,source_file_id").single().then(function (r) {
         if (r.error) { toast(r.error.message, true); return; }
         SL.decks.push(r.data); open(r.data.id, "edit");
       }); return true;
@@ -542,6 +550,51 @@
     }
     return false;
   }
+
+  /* ------------------------------------------------------------ any .pptx file becomes slides */
+  function isPptx(f) { return f && /\.pptx$/i.test(f.file_name || ""); }
+  function pptxBtn(f) {
+    if (!isPptx(f)) return "";
+    var d = SL.decks.filter(function (x) { return x.source_file_id === f.id; })[0];
+    return '<button type="button" class="btn sm" data-act="sl_pptx" data-id="' + f.id + '">' + (d ? "Slides: view or edit" : "Open as slides") + "</button>";
+  }
+  var busy = {}, tried = {}, sweepFiles = [], sweeping = false;
+  function fileToDeck(f) {
+    var sb = A().sb;
+    if (busy[f.id]) return Promise.resolve(null);
+    if (!window.CLEAR_PPTX || !window.JSZip) { toast("The PowerPoint reader did not load. Refresh the page.", true); return Promise.resolve(null); }
+    busy[f.id] = 1; toast("Turning " + (f.title || f.file_name) + " into slides. This takes a few seconds…");
+    return sb.storage.from("materials").createSignedUrl(f.file_path, 600).then(function (r) {
+      if (r.error || !r.data) throw new Error((r.error && r.error.message) || "File not available.");
+      return fetch(r.data.signedUrl);
+    }).then(function (r) { if (!r.ok) throw new Error("Could not download the file."); return r.arrayBuffer(); })
+      .then(function (buf) { return window.CLEAR_PPTX.convert(buf); }).then(function (res) {
+        if (!res.slides.length) throw new Error("No slides found in that file.");
+        var deckId = uid(), map = {}, rows = [];
+        Object.keys(res.assets).forEach(function (k) { map[k] = uid(); var a = res.assets[k]; rows.push({ id: map[k], deck_id: deckId, kind: a.kind, name: a.name, mime: a.mime, data: a.data }); });
+        res.slides.forEach(function (sl) { sl.items.forEach(function (i) { if (i.t === "img" && i.src) i.src = map[i.src]; }); });
+        return sb.from("decks").insert({ id: deckId, cur_lesson_id: f.lesson_id, title: f.title || f.file_name.replace(/\.pptx$/i, ""), slides: res.slides, visible_to_students: !!f.for_student, source_file_id: f.id })
+          .select("id,cur_lesson_id,title,visible_to_students,updated_at,source_file_id").single().then(function (ins) {
+            if (ins.error) { if (String(ins.error.code) === "23505") { load(true); return null; } throw new Error(ins.error.message); }
+            var p = Promise.resolve();
+            for (var i = 0; i < rows.length; i += 4) (function (part) { p = p.then(function () { return sb.from("deck_assets").insert(part).then(function (r2) { if (r2.error) throw new Error(r2.error.message); }); }); })(rows.slice(i, i + 4));
+            return p.then(function () { return sb.from("deck_notes").upsert({ deck_id: deckId, notes: res.notes || {} }); }).then(function () {
+              SL.decks.push(ins.data);
+              toast("Slides ready: " + ins.data.title + (res.skipped ? " (" + res.skipped + " tables or charts could not be converted)" : ""));
+              return ins.data;
+            });
+          });
+      }).catch(function (e) { tried[f.id] = 1; toast("Could not convert to slides: " + (e.message || e), true); return null; })
+      .then(function (d) { delete busy[f.id]; return d; });
+  }
+  function doSweep() {
+    if (sweeping || !isAdmin() || !SL.loaded) return;
+    var todo = sweepFiles.filter(function (f) { return isPptx(f) && !tried[f.id] && !SL.decks.some(function (d) { return d.source_file_id === f.id; }); });
+    if (!todo.length) return;
+    sweeping = true;
+    todo.reduce(function (p, f) { return p.then(function () { tried[f.id] = 1; return fileToDeck(f); }); }, Promise.resolve()).then(function () { sweeping = false; if (A().render) A().render(); });
+  }
+  function sweep(files) { sweepFiles = files || []; doSweep(); }
 
   /* ------------------------------------------------------------ one-time encrypted imports (admin) */
   function hex2buf(h) { var b = new Uint8Array(h.length / 2); for (var i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16); return b; }
@@ -598,5 +651,5 @@
       .catch(function (e) { toast("Import failed: " + (e.message || e), true); });
   }
 
-  window.CLEAR_SL = { click: click, panel: panel, teacherPanel: teacherPanel, studentCards: studentCards, load: load, reset: function () { SL.loaded = false; SL.loading = false; SL.decks = []; }, runImports: runImports };
+  window.CLEAR_SL = { click: click, panel: panel, teacherPanel: teacherPanel, studentCards: studentCards, load: load, reset: function () { SL.loaded = false; SL.loading = false; SL.decks = []; tried = {}; }, runImports: runImports, pptxBtn: pptxBtn, sweep: sweep };
 })();

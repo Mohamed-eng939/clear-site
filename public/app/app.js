@@ -1389,7 +1389,7 @@
       admin ? q("cur_files", "created_at") : Promise.resolve([]), admin ? q("cur_sources", "position") : Promise.resolve([]), q("assignments", "created_at"), admin ? q("level_results", "decided_at") : Promise.resolve([]), q("assignment_files", "created_at")
     ]).then(function (r) {
       S.academicReady = !admin || (r[0] !== null && r[1] !== null && r[2] !== null && r[3] !== null);
-      S.cur_levels = r[0] || []; S.cur_lessons = r[1] || []; S.cur_files = r[2] || []; S.cur_sources = r[3] || [];
+      S.cur_levels = r[0] || []; S.cur_lessons = r[1] || []; S.cur_files = r[2] || []; S.cur_sources = r[3] || []; if (window.CLEAR_SL) window.CLEAR_SL.sweep(S.cur_files);
       S.level_results = r[5] || []; S.afiles = r[6] || []; S.assignments = (r[4] || []).slice().sort(function (a, b) { return a.created_at < b.created_at ? 1 : -1; });
     });
   }
@@ -1466,7 +1466,7 @@
   function curFileRow(f) {
     return '<div class="card" id="cf' + f.id + '"><div class="l1"><span class="t">' + esc(f.title) + '</span><span class="pills"><span class="pill">' + esc(CKINDS[f.kind] || f.kind) + '</span><span class="pill ' + (f.for_student ? "ok" : "warn") + '">' + (f.for_student ? "Student can receive" : "Teacher only") + "</span></span></div>" +
       '<span class="hint">' + esc(f.file_name) + " · " + esc(fmtSize(f.size_bytes)) + "</span>" +
-      '<div class="acts">' + (/^audio\//.test(f.mime || "") ? '<button type="button" class="btn sm" data-act="playcur" data-id="' + f.id + '">Play here</button>' : "") + (viewableCopy(f) ? '<button type="button" class="btn sm" data-act="viewcur" data-id="' + f.id + '">View</button>' : "") + '<button type="button" class="btn sm sec" data-act="opencur" data-id="' + f.id + '">Open or download</button><button type="button" class="btn danger sm" data-act="delcur" data-id="' + f.id + '">Delete</button></div></div>';
+      '<div class="acts">' + (/^audio\//.test(f.mime || "") ? '<button type="button" class="btn sm" data-act="playcur" data-id="' + f.id + '">Play here</button>' : "") + (viewableCopy(f) ? '<button type="button" class="btn sm" data-act="viewcur" data-id="' + f.id + '">View</button>' : "") + (window.CLEAR_SL ? window.CLEAR_SL.pptxBtn(f) : "") + '<button type="button" class="btn sm sec" data-act="opencur" data-id="' + f.id + '">Open or download</button><button type="button" class="btn danger sm" data-act="delcur" data-id="' + f.id + '">Delete</button></div></div>';
   }
   function acLesson(l) {
     var lv = levelOf(l), files = curFiles(l.id), sendable = files.filter(function (f) { return f.for_student; });
