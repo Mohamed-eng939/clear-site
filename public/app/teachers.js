@@ -236,6 +236,7 @@
     if (warns.length) h += '<div class="paydue" role="alert"><b>Notice from the academy</b>' + warns.map(function (w) { return '<span>' + E(WARN[w.level]) + " warning (" + E(day(w.issued_on)) + "): " + E(w.reason) + ' <button type="button" class="btn sm" data-act="tc_ack" data-id="' + w.id + '">I have read this</button></span>'; }).join("") + "</div>";
     h += '<div class="panel"><div class="sec"><h3>Lessons to mark</h3>' + (tomark.length ? tomark.map(function (l) { return lessonCard(l, true); }).join("") : '<p class="hint">All your past lessons are marked. Thank you.</p>') + "</div>" +
       '<div class="sec"><h3>Your next lessons (Egypt time)</h3>' + (up.length ? up.map(function (l) { return lessonCard(l, true); }).join("") : '<p class="hint">No lessons scheduled in the next 3 weeks.</p>') + "</div></div>";
+    if (window.CLEAR_SL) h += window.CLEAR_SL.teacherPanel();
     h += '<div class="panel"><div class="sec"><h3>Homework to review</h3>' + (hw.length ? hw.map(function (x) {
       var files = T.afiles.filter(function (f) { return f.assignment_id === x.id; });
       return '<div class="card"><div class="l1"><span class="t">' + E(x.title) + '</span>' + pill("waiting " + Math.round(hoursSince(x.submitted_at)) + " h", hoursSince(x.submitted_at) > FB_HOURS ? "warn" : "") + '</div><span class="hint">' + E(studentName(x.student_id)) + (x.submitted_at ? " · sent " + E(day(x.submitted_at)) : "") + "</span>" +

@@ -317,6 +317,7 @@
       }).then(function () {
         if (!location.hash || location.hash === "#") location.hash = me.role === "admin" ? "#/students" : "#/me";
         if (window.CLEAR_TC) { window.CLEAR_TC.reset(); if (me.role === "admin" || me.role === "teacher") window.CLEAR_TC.ensure(); }
+        if (window.CLEAR_SL) { window.CLEAR_SL.reset(); window.CLEAR_SL.load(); if (me.role === "admin") window.CLEAR_SL.runImports(); }
         render();
       }).catch(function (e) { toast(e.message, true); renderAuth(e.message); });
   }
@@ -1357,7 +1358,7 @@
           (l.meeting_url && l.status === "scheduled" ? '<div class="acts"><a class="btn sm" href="' + esc(l.meeting_url) + '" target="_blank" rel="noopener">Join lesson</a></div>' : "") + "</div>";
       }).join("") : '<p class="hint">Your lessons will appear here once they are scheduled.</p>') + "</div>" +
       '<p class="hint">To move a lesson, message the academy at least 24 hours before it starts. <a href="' + WHATSAPP + '" target="_blank" rel="noopener">WhatsApp the academy</a>.</p></div>' +
-      '<div class="sec"><h3>Your materials</h3><div class="cards">' + (S.materials.filter(function (m) { return m.student_id === s.id; }).map(function (m) { return materialRow(m, false); }).join("") || '<p class="hint">Slides and handouts from your lessons will appear here.</p>') + "</div></div>" +
+      (window.CLEAR_SL ? window.CLEAR_SL.studentCards() : "") + '<div class="sec"><h3>Your materials</h3><div class="cards">' + (S.materials.filter(function (m) { return m.student_id === s.id; }).map(function (m) { return materialRow(m, false); }).join("") || '<p class="hint">Slides and handouts from your lessons will appear here.</p>') + "</div></div>" +
       (pkgs.length ? '<div class="sec"><h3>Your package</h3><div class="cards">' + pkgs.map(function (p) {
         return '<div class="card"><div class="l1"><span class="t">' + esc(pkgLabel(p)) + '</span><span class="pill ' + (pkgIsPaid(p) ? "ok" : "warn") + '">' + (pkgIsPaid(p) ? "Paid" : "Payment due") + '</span></div><span class="hint">' + pkgUsed(p) + " of " + p.lessons_total + " lessons used" + (p.expires_on ? " · valid until " + esc(p.expires_on) : "") + "</span></div>";
       }).join("") + "</div></div>" : "") +
@@ -1495,7 +1496,7 @@
       '<div class="f"><label for="ct">Title (optional)</label><input id="ct" name="title" placeholder="Uses the file name"></div>' +
       '<div class="f"><label for="cs">Who can receive it</label><select id="cs" name="for_student"><option value="1">Student can receive it</option><option value="0">Teacher only (key, notes)</option></select></div></div>' +
       '<div class="acts"><button class="btn" type="submit">Upload file</button></div></form></div>' +
-      '<div class="sec"><h3>Send to a student</h3>' + (!sendable.length && !l.homework ? '<p class="hint">Upload at least one student file, or write the homework above, then you can send this lesson.</p>' :
+      (window.CLEAR_SL ? window.CLEAR_SL.panel(l.id) : "") + '<div class="sec"><h3>Send to a student</h3>' + (!sendable.length && !l.homework ? '<p class="hint">Upload at least one student file, or write the homework above, then you can send this lesson.</p>' :
         '<form data-form="sendkit" data-id="' + l.id + '" class="addbox"><div class="fields">' +
         '<div class="f"><label for="sl">For which lesson</label><select id="sl" name="lesson_id"><option value="">No specific lesson</option>' + up.map(function (x) { return '<option value="' + x.id + '"' + (linked && linked.id === x.id ? " selected" : "") + ">" + esc(studentName(x.student_id) + " · " + fmtDT(x.starts_at)) + "</option>"; }).join("") + "</select></div>" +
         '<div class="f"><label for="ss">Or choose a student</label><select id="ss" name="student_id"><option value="">Use the lesson above</option>' + students.map(function (s) { return '<option value="' + s.id + '">' + esc(s.full_name) + "</option>"; }).join("") + "</select></div></div>" +
@@ -2174,6 +2175,7 @@
     var a = b.getAttribute("data-act"), id = b.getAttribute("data-id"), v = b.getAttribute("data-v");
     if (window.CLEAR_PL && window.CLEAR_PL.click(a, id, v, b)) return;
     if (window.CLEAR_TC && window.CLEAR_TC.click(a, id, v, b)) return;
+    if (window.CLEAR_SL && window.CLEAR_SL.click(a, id, v, b)) return;
     if (academicClick(a, id, v)) return;
     if (a === "lmark") {
       var ll = byId(S.lessons, id);
