@@ -127,11 +127,11 @@
       return '<button type="button" class="sl-th' + (i === c.idx ? " cur" : "") + '" data-sl="goto" data-i="' + i + '" aria-label="Slide ' + (i + 1) + '"><span class="sl-n">' + (i + 1) + '</span><span class="sl-fit">' + stageHTML(s, { assets: c.assets, all: true, edit: edit }) + "</span></button>";
     }).join("") + (edit ? '<div class="sl-th-acts"><button type="button" class="btn sm sec" data-sl="addslide">+ Slide</button><button type="button" class="btn sm sec" data-sl="dupslide">Duplicate</button><button type="button" class="btn sm sec" data-sl="up">&uarr;</button><button type="button" class="btn sm sec" data-sl="down">&darr;</button><button type="button" class="btn sm sec" data-sl="delslide">Delete</button></div>' : "") + "</div>";
     var slide = c.slides[c.idx];
-    var main = '<div class="sl-main"><div class="sl-canvas"><div class="sl-fit" id="slCanvas" data-edit="' + (edit ? 1 : 0) + '">' + stageHTML(slide, { assets: c.assets, all: true, edit: edit }) + "</div></div>" +
+    var main = '<div class="sl-main"><div class="sl-canvas" style="width:100%;max-width:1100px;margin:0 auto"><div class="sl-fit" id="slCanvas" data-edit="' + (edit ? 1 : 0) + '">' + stageHTML(slide, { assets: c.assets, all: true, edit: edit }) + "</div></div>" +
       '<div class="sl-nav"><button type="button" class="btn sm sec" data-sl="prev">&larr; Previous</button><span>Slide ' + (c.idx + 1) + " of " + c.slides.length + '</span><button type="button" class="btn sm sec" data-sl="next">Next &rarr;</button></div>' +
       (audioBarHTML(slide) || "") + (!edit && isStaff() && c.notes[slide.id] ? '<div class="sl-notes"><b>Teacher notes</b><p>' + E(c.notes[slide.id]) + "</p></div>" : "") + "</div>";
     var props = edit ? '<div class="sl-props" id="slProps">' + propsHTML() + "</div>" : "";
-    return bar + '<div class="sl-body' + (edit ? " edit" : "") + '">' + thumbs + main + props + "</div>";
+    return bar + '<div class="sl-body' + (edit ? " edit" : "") + '" style="flex:1;min-height:0;display:grid;grid-template-columns:' + (window.innerWidth <= 640 ? "minmax(0,1fr)" : window.innerWidth <= 1100 ? (edit ? "120px minmax(0,1fr) 250px" : "120px minmax(0,1fr)") : (edit ? "168px minmax(0,1fr) 310px" : "168px minmax(0,1fr)")) + '">' + thumbs + main + props + "</div>";
   }
   function audioBarHTML(slide) {
     var list = (slide.items || []).filter(function (i) { return i.t === "audio" && i.src && SL.cur.assets[i.src]; });
