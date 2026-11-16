@@ -79,6 +79,7 @@
   /* scale a .sl-fit box (16:9) so the 1333 x 750 stage fits inside it */
   function fit(box) {
     var st = box.firstElementChild; if (!st) return;
+    if (!box.clientWidth) { box._tries = (box._tries || 0) + 1; if (box._tries < 20) setTimeout(function () { fit(box); }, 80); return; }
     var s = box.clientWidth / (W * PX); st.style.transform = "scale(" + s + ")";
   }
   function fitAll(root) { $$(".sl-fit", root).forEach(fit); }
