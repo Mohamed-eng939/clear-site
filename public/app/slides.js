@@ -124,7 +124,7 @@
         : '<button type="button" class="btn sm sec" data-sl="edit">Edit</button>') : "") +
       '<button type="button" class="btn sm sec" data-sl="close">Close</button></div></div>';
     var thumbs = '<div class="sl-thumbs" id="slThumbs">' + c.slides.map(function (s, i) {
-      return '<button type="button" class="sl-th' + (i === c.idx ? " cur" : "") + '" data-sl="goto" data-i="' + i + '" aria-label="Slide ' + (i + 1) + '"><span class="sl-n">' + (i + 1) + '</span><span class="sl-fit">' + stageHTML(s, { assets: c.assets, all: true, edit: edit }) + "</span></button>";
+      return '<div role="button" tabindex="0" class="sl-th' + (i === c.idx ? " cur" : "") + '" data-sl="goto" data-i="' + i + '" aria-label="Slide ' + (i + 1) + '"><span class="sl-n">' + (i + 1) + '</span><span class="sl-fit">' + stageHTML(s, { assets: c.assets, all: true, edit: edit }) + "</span></div>";
     }).join("") + (edit ? '<div class="sl-th-acts"><button type="button" class="btn sm sec" data-sl="addslide">+ Slide</button><button type="button" class="btn sm sec" data-sl="dupslide">Duplicate</button><button type="button" class="btn sm sec" data-sl="up">&uarr;</button><button type="button" class="btn sm sec" data-sl="down">&darr;</button><button type="button" class="btn sm sec" data-sl="delslide">Delete</button></div>' : "") + "</div>";
     var slide = c.slides[c.idx];
     var main = '<div class="sl-main"><div class="sl-canvas" style="width:100%;max-width:1100px;margin:0 auto"><div class="sl-fit" id="slCanvas" data-edit="' + (edit ? 1 : 0) + '">' + stageHTML(slide, { assets: c.assets, all: true, edit: edit }) + "</div></div>" +
@@ -388,6 +388,9 @@
     if (a === "color") return setCol(b.getAttribute("data-name"), b.getAttribute("data-v"));
     if (a === "rmaudio") { var s3 = selItem(); if (!s3) return; snap(); s3.src = null; dirty(); redrawCanvas(); return redrawProps(); }
   }
+  document.addEventListener("keydown", function (e) {
+    if ((e.key === "Enter" || e.key === " ") && e.target.classList && e.target.classList.contains("sl-th")) { e.preventDefault(); slAct("goto", e.target); }
+  });
   document.addEventListener("click", function (e) {
     var au = e.target.closest("[data-aud]");
     if (au && (e.target.closest("#slApp") || e.target.closest("#slShow"))) { e.preventDefault(); toggleAudio(au.getAttribute("data-aud")); return; }

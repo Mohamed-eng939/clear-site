@@ -76,3 +76,5 @@ body.sl-open{overflow:hidden}
 .sl-th .sl-fit{display:block;border-radius:4px}
 .slapp *,.slshow *{box-sizing:border-box}.sl-props .sl-row.col textarea,.sl-props .sl-row.col input{width:100%}
 .sl-ctl .btn,.sl-ctl .btn.sec{background:rgba(255,255,255,.12);color:#fff;border:1px solid #888}.sl-ctl .btn:not(.sec){background:#E63946;border-color:#E63946}
+
+.sl-th{text-align:left;width:100%}.sl-th:focus-visible{outline:3px solid #0b63ce;outline-offset:2px}
