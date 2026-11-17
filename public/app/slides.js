@@ -552,7 +552,34 @@
   }
 
   /* ------------------------------------------------------------ any .pptx file becomes slides */
-  function isPptx(f) { return f && /\.pptx$/i.test(f.file_name || ""); }
+  function isPptx(f) { return f && (/\.pptx$/i.test(f.file_name || "") || (f.kind === "slides" && /\.pdf$/i.test(f.file_name || ""))); }
+  function isPdf(f) { return /\.pdf$/i.test(f.file_name || "") && !/\.pptx$/i.test(f.file_name || ""); }
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    return new Promise(function (res, rej) {
+      var sc = document.createElement("script"); sc.src = "vendor/pdf.min.js";
+      sc.onload = function () { window.pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js"; res(window.pdfjsLib); };
+      sc.onerror = function () { rej(new Error("PDF reader did not load")); }; document.head.appendChild(sc);
+    });
+  }
+  /* a PDF of slides becomes one full-slide picture per page (view, present, add audio and text on top) */
+  function pdfToDeck(buf) {
+    return loadPdfJs().then(function (lib) { return lib.getDocument({ data: buf }).promise; }).then(function (pdf) {
+      var slides = [], assets = {}, p = Promise.resolve();
+      for (var n = 1; n <= pdf.numPages; n++) (function (n) {
+        p = p.then(function () { return pdf.getPage(n); }).then(function (page) {
+          var v1 = page.getViewport({ scale: 1 }), sc = 1100 / v1.width, vp = page.getViewport({ scale: sc }), cv = document.createElement("canvas");
+          cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+          return page.render({ canvasContext: cv.getContext("2d"), viewport: vp }).promise.then(function () {
+            var id = "a" + n, h = Math.min(7.5, 13.333 * cv.height / cv.width), w = h * cv.width / cv.height;
+            assets[id] = { kind: "image", name: "page-" + n + ".jpg", mime: "image/jpeg", data: cv.toDataURL("image/jpeg", 0.74).split(",")[1] };
+            slides.push({ id: "s" + n, bg: "#FFFFFF", tr: "fade", items: [{ id: "p" + n, t: "img", x: Math.round((13.333 - w) / 2 * 1000) / 1000, y: Math.round((7.5 - h) / 2 * 1000) / 1000, w: Math.round(w * 1000) / 1000, h: Math.round(h * 1000) / 1000, step: 0, src: id }] });
+          });
+        });
+      })(n);
+      return p.then(function () { return { slides: slides, notes: {}, assets: assets, skipped: 0 }; });
+    });
+  }
   function pptxBtn(f) {
     if (!isPptx(f)) return "";
     var d = SL.decks.filter(function (x) { return x.source_file_id === f.id; })[0];
@@ -568,12 +595,12 @@
       if (r.error || !r.data) throw new Error((r.error && r.error.message) || "File not available.");
       return fetch(r.data.signedUrl);
     }).then(function (r) { if (!r.ok) throw new Error("Could not download the file."); return r.arrayBuffer(); })
-      .then(function (buf) { return window.CLEAR_PPTX.convert(buf); }).then(function (res) {
+      .then(function (buf) { return isPdf(f) ? pdfToDeck(buf) : window.CLEAR_PPTX.convert(buf); }).then(function (res) {
         if (!res.slides.length) throw new Error("No slides found in that file.");
         var deckId = uid(), map = {}, rows = [];
         Object.keys(res.assets).forEach(function (k) { map[k] = uid(); var a = res.assets[k]; rows.push({ id: map[k], deck_id: deckId, kind: a.kind, name: a.name, mime: a.mime, data: a.data }); });
         res.slides.forEach(function (sl) { sl.items.forEach(function (i) { if (i.t === "img" && i.src) i.src = map[i.src]; }); });
-        return sb.from("decks").insert({ id: deckId, cur_lesson_id: f.lesson_id, title: f.title || f.file_name.replace(/\.pptx$/i, ""), slides: res.slides, visible_to_students: !!f.for_student, source_file_id: f.id })
+        return sb.from("decks").insert({ id: deckId, cur_lesson_id: f.lesson_id, title: f.title || f.file_name.replace(/\.(pptx|pdf)$/i, ""), slides: res.slides, visible_to_students: !!f.for_student, source_file_id: f.id })
           .select("id,cur_lesson_id,title,visible_to_students,updated_at,source_file_id").single().then(function (ins) {
             if (ins.error) { if (String(ins.error.code) === "23505") { load(true); return null; } throw new Error(ins.error.message); }
             var p = Promise.resolve();
@@ -589,10 +616,13 @@
   }
   function doSweep() {
     if (sweeping || !isAdmin() || !SL.loaded) return;
-    var todo = sweepFiles.filter(function (f) { return isPptx(f) && !tried[f.id] && !SL.decks.some(function (d) { return d.source_file_id === f.id; }); });
-    if (!todo.length) return;
     sweeping = true;
-    todo.reduce(function (p, f) { return p.then(function () { tried[f.id] = 1; return fileToDeck(f); }); }, Promise.resolve()).then(function () { sweeping = false; if (A().render) A().render(); });
+    A().sb.from("cur_files").select("*").or("file_name.ilike.%.pptx,and(kind.eq.slides,file_name.ilike.%.pdf)").then(function (r) {
+      var files = (r && r.data) || [];
+      var todo = files.filter(function (f) { return isPptx(f) && !tried[f.id] && !SL.decks.some(function (d) { return d.source_file_id === f.id; }); });
+      if (!todo.length) { sweeping = false; return; }
+      return todo.reduce(function (p, f) { return p.then(function () { tried[f.id] = 1; return fileToDeck(f); }); }, Promise.resolve()).then(function () { sweeping = false; if (A().render) A().render(); });
+    }).catch(function (e) { sweeping = false; toast("Slide conversion check failed: " + (e.message || e), true); });
   }
   function sweep(files) { sweepFiles = files || []; doSweep(); }
 
