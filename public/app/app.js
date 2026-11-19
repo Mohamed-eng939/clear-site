@@ -1447,9 +1447,20 @@
 
   /* ---- plan */
   function acPlan() {
-    var total = S.cur_lessons.length, ready = S.cur_lessons.filter(function (l) { return l.status === "ready"; }).length;
-    return '<div class="sum" style="margin:0"><div><span class="label">Program</span><b style="font-size:17px">General English A1</b></div><div><span class="label">Levels</span><b>' + S.cur_levels.filter(function (x) { return x.cefr !== "Special"; }).length + '</b></div><div><span class="label">Lessons ready</span><b>' + ready + " / " + total + "</b></div></div>" +
-      S.cur_levels.map(function (lv) {
+    var prog = PRICES[UI.acProg] ? UI.acProg : "general";
+    var lvls = S.cur_levels.filter(function (lv) { return (lv.program || "general") === prog; });
+    var ids = {}; lvls.forEach(function (lv) { ids[lv.id] = 1; });
+    var lessons = S.cur_lessons.filter(function (l) { return ids[l.level_id]; });
+    var total = lessons.length, ready = lessons.filter(function (l) { return l.status === "ready"; }).length;
+    var names = {}; Object.keys(PRICES).forEach(function (k) {
+      var n = S.cur_levels.filter(function (lv) { return (lv.program || "general") === k; }).reduce(function (m, lv) { return m + S.cur_lessons.filter(function (l) { return l.level_id === lv.id; }).length; }, 0);
+      names[k] = PRICES[k].name + " (" + (n ? n + (n === 1 ? " lesson" : " lessons") : "nothing yet") + ")";
+    });
+    var head = '<div class="sum" style="margin:0"><div><label class="label" for="acp">Program</label><select id="acp" data-change="acprog" aria-label="Program" style="font-size:17px;font-weight:700">' + opt(Object.keys(PRICES), prog, names) + "</select></div>" +
+      '<div><span class="label">Levels</span><b>' + lvls.filter(function (x) { return x.cefr !== "Special"; }).length + '</b></div><div><span class="label">Lessons ready</span><b>' + ready + " / " + total + "</b></div></div>";
+    if (!lvls.length) return head + '<div class="empty" style="margin-top:6px"><b>No ' + esc(PRICES[prog].name) + ' lessons yet</b>Choose another program above. Lessons for this one will appear here once they are added to the curriculum.</div>';
+    return head +
+      lvls.map(function (lv) {
         var ls = S.cur_lessons.filter(function (l) { return l.level_id === lv.id; }).sort(function (a, b) { return a.number - b.number; });
         return '<div class="panel"><div><h2>' + esc(lv.code) + " " + esc(lv.name) + '</h2><p class="hint">' + esc(lv.summary || "") + '</p></div><div class="cards">' + ls.map(function (l) {
           var n = curFiles(l.id).length;
@@ -2063,6 +2074,7 @@
   function academicChange(t, ch) {
     if (ch === "importpick") { importPick(t); return true; }
     if (ch === "calteacher") { UI.schedTeacher = t.value; render(); return true; }
+    if (ch === "acprog") { UI.acProg = t.value; render(); return true; }
     if (ch === "curstatus") {
       act(sb.from("cur_lessons").update({ status: t.value, updated_at: new Date().toISOString() }).eq("id", t.getAttribute("data-id")).select("id")).then(function (rows) {
         if (!rows || !rows.length) { toast("Nothing was saved. Refresh and sign in again.", true); } else toast("Status saved: " + CSTATUS[t.value] + ".");
