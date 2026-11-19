@@ -110,7 +110,7 @@ textarea{min-height:76px;resize:vertical}
 .scale .bars i.on{background:var(--ink)}
 .scale .names{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-top:6px;font:600 11px/14px var(--display);color:var(--ink-soft)}
 .report h3{font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px}
-.report p{margin:0}
+.report p{margin:0;white-space:pre-line}
 .skill{padding-top:12px;border-top:1px solid var(--line);display:grid;gap:4px}
 .skill h4{font:600 16px/1.3 var(--display);margin:0}
 .skill .can b{color:var(--positive)}
