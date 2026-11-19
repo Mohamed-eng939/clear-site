@@ -78,3 +78,14 @@ body.sl-open{overflow:hidden}
 .sl-ctl .btn,.sl-ctl .btn.sec{background:rgba(255,255,255,.12);color:#fff;border:1px solid #888}.sl-ctl .btn:not(.sec){background:#E63946;border-color:#E63946}
 
 .sl-th{text-align:left;width:100%}.sl-th:focus-visible{outline:3px solid #0b63ce;outline-offset:2px}
+
+/* annotation tools in the slide show */
+.sl-ink{position:absolute;inset:0;width:100%;height:100%;z-index:50;pointer-events:none;touch-action:none}
+.sl-ink.on{pointer-events:auto}.sl-ink.tool-pen,.sl-ink.tool-hl{cursor:crosshair}.sl-ink.tool-erase{cursor:cell}.sl-ink.tool-laser{cursor:none}
+.sl-laser{position:fixed;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;background:#ff2a2a;box-shadow:0 0 14px 6px rgba(255,40,40,.55);pointer-events:none;z-index:103}
+.sl-ink-bar{position:fixed;left:10px;top:50%;transform:translateY(-50%);z-index:102;display:flex;flex-direction:column;gap:6px;background:rgba(22,24,29,.9);padding:8px;border-radius:12px;opacity:.0;transition:opacity .25s;color:#fff;font-size:12px;max-height:94vh;overflow:auto}
+.slshow:hover .sl-ink-bar{opacity:.55}.sl-ink-bar:hover,.sl-ink-bar:focus-within{opacity:1}
+@media (hover:none){.sl-ink-bar{opacity:.9}}
+.sl-ink-bar .btn.sec{background:rgba(255,255,255,.08);color:#fff;border-color:#888;text-align:left}.sl-ink-bar .btn.on{background:#E63946;border-color:#E63946;color:#fff}
+.sl-ink-sw{display:grid;grid-template-columns:repeat(3,24px);gap:6px;padding:2px 0}.sl-ink-bar .sw.on{outline:3px solid #fff}
+.sl-ink-hint{color:#bbb;font-size:11px;max-width:96px}

@@ -433,6 +433,7 @@
     el = document.createElement("div"); el.id = "slShow"; el.className = "slshow"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Slide show");
     document.body.appendChild(el);
     el.innerHTML = '<div class="sl-sbox" id="slSbox"></div><div class="sl-ctl" id="slCtl"><button type="button" data-sh="prev" class="btn sm sec" aria-label="Previous">&larr;</button><span id="slCnt"></span><button type="button" data-sh="next" class="btn sm sec" aria-label="Next">&rarr;</button><span id="slAudCtl"></span><button type="button" data-sh="full" class="btn sm sec">Full screen</button><button type="button" data-sh="exit" class="btn sm">Exit</button></div>';
+    inkInit(el);
     el.addEventListener("click", onShowClick);
     document.addEventListener("keydown", onShowKey, true);
     window.addEventListener("resize", showFit);
@@ -443,7 +444,7 @@
   function onFsChange() { if (!document.fullscreenElement && SL.show && SL.show.wantFs) { /* user left full screen; keep the show open */ } showFit(); }
   function showFit() {
     var box = $("#slSbox"); if (!box) return; var st = box.firstElementChild; if (!st) return;
-    var s = Math.min(box.clientWidth / (W * PX), box.clientHeight / (H * PX)); st.style.transform = "scale(" + s + ")"; st.style.left = (box.clientWidth - W * PX * s) / 2 + "px"; st.style.top = (box.clientHeight - H * PX * s) / 2 + "px";
+    var s = Math.min(box.clientWidth / (W * PX), box.clientHeight / (H * PX)); st.style.transform = "scale(" + s + ")"; st.style.left = (box.clientWidth - W * PX * s) / 2 + "px"; st.style.top = (box.clientHeight - H * PX * s) / 2 + "px"; inkSize();
   }
   function drawShow(how) {
     var sh = SL.show, slide = sh.slides[sh.idx], box = $("#slSbox"); if (!box) return;
@@ -453,7 +454,7 @@
     $("#slCnt").textContent = (sh.idx + 1) + " / " + sh.slides.length + (maxStep(slide) ? "  ·  click " + sh.step + "/" + maxStep(slide) : "");
     var auds = (slide.items || []).filter(function (i) { return i.t === "audio" && i.src && sh.assets[i.src]; });
     $("#slAudCtl").innerHTML = auds.map(function (i) { return '<button type="button" class="btn sm sec" data-aud="' + E(i.id) + '"><span class="sl-aud-ic">&#9654;</span> ' + E(i.label || "Listen") + "</button>"; }).join("");
-    syncAudioUI();
+    syncAudioUI(); inkRedraw();
   }
   function showNext() {
     var sh = SL.show, slide = sh.slides[sh.idx];
@@ -479,14 +480,88 @@
     var k = e.key;
     if (k === "ArrowRight" || k === "PageDown" || k === " " || k === "Enter") { e.preventDefault(); e.stopPropagation(); showNext(); }
     else if (k === "ArrowLeft" || k === "PageUp" || k === "Backspace") { e.preventDefault(); e.stopPropagation(); showPrev(); }
-    else if (k === "Escape") { e.preventDefault(); e.stopPropagation(); exitShow(); }
+    else if (k === "Escape") { e.preventDefault(); e.stopPropagation(); if (SL.show.tool) inkTool(SL.show.tool); else exitShow(); }
+    else if ((k === "z" || k === "Z") && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); inkUndo(); }
+    else if (!e.ctrlKey && !e.metaKey && !e.altKey && { p: "pen", h: "hl", e: "erase", l: "laser" }[k.toLowerCase()]) inkTool({ p: "pen", h: "hl", e: "erase", l: "laser" }[k.toLowerCase()]);
     else if (k === "Home") { SL.show.idx = 0; SL.show.step = 0; drawShow("none"); }
     else if (k === "End") { SL.show.idx = SL.show.slides.length - 1; SL.show.step = 0; drawShow("none"); }
     else if (k === "f" || k === "F") toggleFs();
   }
+  /* ------------------------------------------------------------ annotation tools while presenting */
+  var INKC = ["#E63946", "#16181D", "#2B7FFF", "#1A9E5A", "#FFD84D", "#FFFFFF"], inkCur = null;
+  function inkInit(el) {
+    var sh = SL.show; sh.ink = {}; sh.tool = null; sh.col = INKC[0];
+    var bar = '<button type="button" class="btn sm sec" data-ink="pen" title="Pen (P)">Pen</button><button type="button" class="btn sm sec" data-ink="hl" title="Highlighter (H)">Marker</button>' +
+      '<button type="button" class="btn sm sec" data-ink="erase" title="Eraser (E)">Eraser</button><button type="button" class="btn sm sec" data-ink="laser" title="Laser pointer (L)">Laser</button><div class="sl-ink-sw">' +
+      INKC.map(function (c, i) { return '<button type="button" class="sw' + (i === 0 ? " on" : "") + '" style="background:' + c + '" data-ink-col="' + c + '" aria-label="Ink colour ' + (i + 1) + '"></button>'; }).join("") +
+      '</div><button type="button" class="btn sm sec" data-ink="undo" title="Undo (Ctrl+Z)">Undo</button><button type="button" class="btn sm sec" data-ink="clear" title="Clear this slide">Clear</button><span class="sl-ink-hint">Esc = stop drawing</span>';
+    el.insertAdjacentHTML("beforeend", '<canvas id="slInk" class="sl-ink"></canvas><div id="slLaser" class="sl-laser" hidden></div><div class="sl-ink-bar" id="slInkBar" role="toolbar" aria-label="Annotation tools">' + bar + "</div>");
+    var cv = $("#slInk");
+    cv.addEventListener("pointerdown", inkDown); cv.addEventListener("pointermove", inkMove); cv.addEventListener("pointerup", inkUp); cv.addEventListener("pointercancel", inkUp);
+    cv.addEventListener("pointerleave", function () { var L = $("#slLaser"); if (L) L.hidden = true; });
+    cv.addEventListener("click", function (e) { e.stopPropagation(); });
+  }
+  function inkXf() { var box = $("#slSbox"), s = Math.min(box.clientWidth / (W * PX), box.clientHeight / (H * PX)); return { s: s, ox: (box.clientWidth - W * PX * s) / 2, oy: (box.clientHeight - H * PX * s) / 2 }; }
+  function inkPt(e) { var x = inkXf(), r = $("#slInk").getBoundingClientRect(); return [(e.clientX - r.left - x.ox) / x.s, (e.clientY - r.top - x.oy) / x.s]; }
+  function inkSize() {
+    var cv = $("#slInk"); if (!cv || !SL.show) return; var d = window.devicePixelRatio || 1;
+    cv.width = Math.max(1, Math.round(cv.clientWidth * d)); cv.height = Math.max(1, Math.round(cv.clientHeight * d)); inkRedraw();
+  }
+  function inkRedraw() {
+    var cv = $("#slInk"); if (!cv || !SL.show) return;
+    var g = cv.getContext("2d"), d = window.devicePixelRatio || 1, x = inkXf();
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
+    g.setTransform(d * x.s, 0, 0, d * x.s, d * x.ox, d * x.oy); g.lineCap = "round"; g.lineJoin = "round";
+    (SL.show.ink[SL.show.idx] || []).forEach(function (s) {
+      g.globalAlpha = s.hl ? 0.38 : 1; g.strokeStyle = s.c; g.lineWidth = s.w; g.beginPath();
+      s.p.forEach(function (q, i) { if (i) g.lineTo(q[0], q[1]); else g.moveTo(q[0], q[1]); });
+      if (s.p.length === 1) g.lineTo(s.p[0][0] + 0.01, s.p[0][1]);
+      g.stroke();
+    });
+    g.globalAlpha = 1;
+  }
+  function inkTool(t) {
+    var sh = SL.show; if (!sh) return; sh.tool = sh.tool === t ? null : t; inkCur = null;
+    var cv = $("#slInk"); cv.className = "sl-ink" + (sh.tool ? " on tool-" + sh.tool : "");
+    var L = $("#slLaser"); if (L) L.hidden = true;
+    $$("#slInkBar [data-ink]").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-ink") === sh.tool); });
+  }
+  function inkColor(c) {
+    var sh = SL.show; if (!sh) return; sh.col = c;
+    $$("#slInkBar [data-ink-col]").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-ink-col") === c); });
+    if (sh.tool !== "pen" && sh.tool !== "hl") inkTool("pen");
+  }
+  function inkDown(e) {
+    var sh = SL.show; if (!sh || !sh.tool) return; e.preventDefault(); e.stopPropagation();
+    if (this.setPointerCapture) { try { this.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } }
+    if (sh.tool === "laser") { inkLaser(e); return; }
+    var p = inkPt(e);
+    if (sh.tool === "erase") { inkCur = "erase"; inkErase(p); return; }
+    var list = sh.ink[sh.idx] || (sh.ink[sh.idx] = []);
+    inkCur = { c: sh.col, w: sh.tool === "hl" ? 26 : 5, hl: sh.tool === "hl", p: [p] }; list.push(inkCur); inkRedraw();
+  }
+  function inkMove(e) {
+    var sh = SL.show; if (!sh || !sh.tool) return;
+    if (sh.tool === "laser") { inkLaser(e); return; }
+    if (!inkCur) return; var p = inkPt(e);
+    if (inkCur === "erase") inkErase(p); else { inkCur.p.push(p); inkRedraw(); }
+  }
+  function inkUp() { inkCur = null; }
+  function inkErase(p) {
+    var sh = SL.show, l = sh.ink[sh.idx]; if (!l || !l.length) return; var r = 16 / inkXf().s;
+    var keep = l.filter(function (s) { return !s.p.some(function (q) { return Math.hypot(q[0] - p[0], q[1] - p[1]) < r + s.w / 2; }); });
+    if (keep.length !== l.length) { sh.ink[sh.idx] = keep; inkRedraw(); }
+  }
+  function inkLaser(e) { var L = $("#slLaser"); if (!L) return; L.hidden = false; L.style.left = e.clientX + "px"; L.style.top = e.clientY + "px"; }
+  function inkUndo() { var sh = SL.show; if (!sh) return; var l = sh.ink[sh.idx]; if (l && l.length) { l.pop(); inkRedraw(); } }
+  function inkClear() { var sh = SL.show; if (!sh) return; sh.ink[sh.idx] = []; inkRedraw(); }
   function toggleFs() { var el = $("#slShow"); if (!el) return; if (document.fullscreenElement) document.exitFullscreen(); else if (el.requestFullscreen) el.requestFullscreen(); }
   function onShowClick(e) {
     if (e.target.closest("[data-aud]")) return;
+    var ik = e.target.closest("[data-ink]"), ic = e.target.closest("[data-ink-col]");
+    if (ik) { var ia = ik.getAttribute("data-ink"); if (ia === "undo") inkUndo(); else if (ia === "clear") inkClear(); else inkTool(ia); return; }
+    if (ic) { inkColor(ic.getAttribute("data-ink-col")); return; }
+    if (e.target.closest(".sl-ink-bar")) return;
     var b = e.target.closest("[data-sh]");
     if (b) { var a = b.getAttribute("data-sh"); if (a === "next") showNext(); else if (a === "prev") showPrev(); else if (a === "exit") exitShow(); else if (a === "full") toggleFs(); return; }
     if (e.target.closest(".sl-ctl")) return;
