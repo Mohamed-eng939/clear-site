@@ -157,7 +157,7 @@
     var slideP = '<div class="sl-pg"><b>This slide</b><div class="sl-row"><label>Background</label>' + colorSel("bg", slide.bg, false) + "</div>" +
       '<div class="sl-row"><label for="slTr">Transition</label><select id="slTr" data-sl-in="tr"><option value="fade"' + (slide.tr === "fade" ? " selected" : "") + '>Fade</option><option value="push"' + (slide.tr === "push" ? " selected" : "") + '>Slide in</option><option value="zoom"' + (slide.tr === "zoom" ? " selected" : "") + '>Zoom</option><option value="none"' + (slide.tr === "none" ? " selected" : "") + ">None</option></select></div>" +
       '<div class="sl-row col"><label for="slNote">Teacher notes (students never see these)</label><textarea id="slNote" data-sl-in="note" rows="5">' + E(c.notes[slide.id] || "") + "</textarea></div></div>";
-    if (!it) return add + '<p class="hint">Click an item on the slide to edit it. Drag to move, pull the corner to resize.</p>' + slideP;
+    if (!it) return add + '<p class="hint">Click an item to select it. Double-click text to type on the slide. Drag to move, pull the corner to resize.</p>' + slideP;
     var h = add + '<div class="sl-pg"><b>' + (it.t === "text" ? "Text" : it.t === "box" ? "Box" : it.t === "img" ? "Picture" : "Audio") + "</b>";
     if (it.t === "text" || it.t === "box") {
       var first = it.paras && it.paras[0] && it.paras[0].runs[0] || {};
@@ -245,7 +245,7 @@
   var drag = null;
   function wireApp(el) {
     var cv = $("#slCanvas", el);
-    if (cv && cv.getAttribute("data-edit") === "1") { markSel(); cv.addEventListener("pointerdown", onDown); }
+    if (cv && cv.getAttribute("data-edit") === "1") { markSel(); cv.addEventListener("pointerdown", onDown); cv.addEventListener("dblclick", onDbl); }
     wireProps(el);
   }
   /* the properties panel is re-rendered whenever the selection changes, so its fields must be wired again each time */
@@ -257,16 +257,72 @@
     });
   }
   function onDown(e) {
-    var c = SL.cur, cv = e.currentTarget, itEl = e.target.closest(".sl-it"), box = cv.getBoundingClientRect(), scale = box.width / (W * PX);
+    var c = SL.cur, cv = e.currentTarget, tgt = e.target, itEl = tgt.closest(".sl-it"), box = cv.getBoundingClientRect(), scale = box.width / (W * PX);
+    if (editing) {
+      if (itEl && itEl === editing.n) return; /* clicking inside the text being edited: let the caret move */
+      finishEdit(); tgt = document.elementFromPoint(e.clientX, e.clientY) || tgt; itEl = tgt.closest && tgt.closest(".sl-it");
+    }
     if (!itEl) { if (c.sel) { c.sel = null; markSel(); redrawProps(); } return; }
     var id = itEl.getAttribute("data-id"), it = curSlide().items.filter(function (i) { return i.id === id; })[0]; if (!it) return;
-    if (e.target.closest(".sl-aud") ) e.preventDefault();
+    if (tgt.closest(".sl-aud")) e.preventDefault();
     var selChanged = c.sel !== id; c.sel = id; markSel(); if (selChanged) redrawProps();
-    var resize = !!e.target.closest(".sl-rs");
+    var resize = !!tgt.closest(".sl-rs");
     drag = { it: it, resize: resize, sx: e.clientX, sy: e.clientY, ox: it.x, oy: it.y, ow: it.w, oh: it.h, scale: scale, moved: false, el: itEl };
     cv.setPointerCapture && cv.setPointerCapture(e.pointerId);
     cv.addEventListener("pointermove", onMove); cv.addEventListener("pointerup", onUp); cv.addEventListener("pointercancel", onUp);
     e.preventDefault();
+  }
+  /* ---- type directly on the slide: double-click a text item */
+  var editing = null;
+  function itemText(n) {
+    var lines = [];
+    Array.prototype.forEach.call(n.childNodes, function (ch) {
+      var t;
+      if (ch.nodeType === 1) { if (ch.classList.contains("sl-rs")) return; t = ch.textContent; }
+      else if (ch.nodeType === 3) t = ch.nodeValue; else return;
+      lines.push(t === "\u00a0" ? "" : t.replace(/\u00a0/g, " ").replace(/\n/g, " "));
+    });
+    return lines.join("\n");
+  }
+  function onDbl(e) {
+    var c = SL.cur, t = document.elementFromPoint(e.clientX, e.clientY), n = t && t.closest && t.closest(".sl-it"); /* the canvas holds pointer capture, so e.target is the canvas */ if (!c || c.mode !== "edit" || !n) return;
+    var id = n.getAttribute("data-id"), it = curSlide().items.filter(function (i) { return i.id === id; })[0];
+    if (!it || (it.t !== "text" && it.t !== "box") || (editing && editing.n === n)) return;
+    drag = null; if (c.sel !== id) { c.sel = id; markSel(); redrawProps(); }
+    startEdit(n, it);
+  }
+  function startEdit(n, it) {
+    if (editing) finishEdit();
+    editing = { n: n, it: it, changed: false };
+    var h = $(".sl-rs", n); if (h) h.remove();
+    n.setAttribute("contenteditable", "true"); n.setAttribute("data-editing", "1"); n.spellcheck = false;
+    n.addEventListener("input", onEditInput); n.addEventListener("keydown", onEditKey); n.addEventListener("paste", onEditPaste); n.addEventListener("blur", finishEdit);
+    n.focus();
+    var sel = window.getSelection(), r = document.createRange(); r.selectNodeContents(n); r.collapse(false); sel.removeAllRanges(); sel.addRange(r);
+  }
+  function onEditInput() {
+    if (!editing) return;
+    if (!editing.changed) { snap(); editing.changed = true; }
+    var t = itemText(editing.n); setText(editing.it, t); dirty();
+    var tx = $("#slTx"); if (tx) tx.value = t;
+  }
+  function onEditKey(e) {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); e.target.blur(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); save(); return; }
+    e.stopPropagation();
+  }
+  function onEditPaste(e) {
+    e.preventDefault();
+    var t = ((e.clipboardData || window.clipboardData).getData("text") || "").replace(/\r/g, "");
+    document.execCommand("insertText", false, t);
+  }
+  function finishEdit() {
+    if (!editing) return;
+    var ed = editing; editing = null;
+    ed.n.removeEventListener("input", onEditInput); ed.n.removeEventListener("keydown", onEditKey); ed.n.removeEventListener("paste", onEditPaste); ed.n.removeEventListener("blur", finishEdit);
+    ed.n.removeAttribute("contenteditable"); ed.n.removeAttribute("data-editing");
+    if (!SL.cur) return;
+    redrawCanvas();
   }
   function onMove(e) {
     if (!drag) return;
@@ -285,7 +341,7 @@
   }
   document.addEventListener("keydown", function (e) {
     var c = SL.cur; if (!c || !$("#slApp") || SL.show) return;
-    var tag = (e.target.tagName || "").toLowerCase(); if (tag === "input" || tag === "textarea" || tag === "select") { if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); save(); } return; }
+    if (e.target.isContentEditable) return; var tag = (e.target.tagName || "").toLowerCase(); if (tag === "input" || tag === "textarea" || tag === "select") { if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); save(); } return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); save(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "z" && c.mode === "edit") { e.preventDefault(); undo(); return; }
     if (e.key === "Escape") { closeApp(); return; }
