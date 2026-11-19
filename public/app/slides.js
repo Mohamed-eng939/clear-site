@@ -494,10 +494,24 @@
     document.addEventListener("keydown", onShowKey, true);
     window.addEventListener("resize", showFit);
     drawShow("none");
-    if (el.requestFullscreen) { el.requestFullscreen().catch(function () { /* stays in the page */ }); }
+    enterFs(el);
     document.addEventListener("fullscreenchange", onFsChange);
   }
-  function onFsChange() { if (!document.fullscreenElement && SL.show && SL.show.wantFs) { /* user left full screen; keep the show open */ } showFit(); }
+  /* Esc normally leaves full screen before the page sees it. Keyboard Lock (Chrome, Edge) hands Esc to the page, so the first Esc stops
+     drawing and the next one exits the show; holding Esc still leaves full screen. Other browsers fall back to onFsChange below. */
+  function enterFs(el) {
+    if (!el || !el.requestFullscreen) return;
+    el.requestFullscreen().then(function () {
+      try { if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock(["Escape"]).catch(function () {}); } catch (x) { /* optional */ }
+    }).catch(function () { /* stays in the page */ });
+  }
+  function onFsChange() {
+    if (!document.fullscreenElement) {
+      try { if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock(); } catch (x) { /* optional */ }
+      if (SL.show && SL.show.tool) inkTool(SL.show.tool); /* leaving full screen also puts the pen down */
+    }
+    showFit();
+  }
   function showFit() {
     var box = $("#slSbox"); if (!box) return; var st = box.firstElementChild; if (!st) return;
     var s = Math.min(box.clientWidth / (W * PX), box.clientHeight / (H * PX)); st.style.transform = "scale(" + s + ")"; st.style.left = (box.clientWidth - W * PX * s) / 2 + "px"; st.style.top = (box.clientHeight - H * PX * s) / 2 + "px"; inkSize();
@@ -525,6 +539,7 @@
   function exitShow() {
     var sh = SL.show; if (!sh) return;
     document.removeEventListener("keydown", onShowKey, true); window.removeEventListener("resize", showFit); document.removeEventListener("fullscreenchange", onFsChange);
+    try { if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock(); } catch (x) { /* optional */ }
     if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () {});
     var el = $("#slShow"); if (el) el.remove();
     if (SL.cur) { SL.cur.idx = sh.idx; }
@@ -611,7 +626,7 @@
   function inkLaser(e) { var L = $("#slLaser"); if (!L) return; L.hidden = false; L.style.left = e.clientX + "px"; L.style.top = e.clientY + "px"; }
   function inkUndo() { var sh = SL.show; if (!sh) return; var l = sh.ink[sh.idx]; if (l && l.length) { l.pop(); inkRedraw(); } }
   function inkClear() { var sh = SL.show; if (!sh) return; sh.ink[sh.idx] = []; inkRedraw(); }
-  function toggleFs() { var el = $("#slShow"); if (!el) return; if (document.fullscreenElement) document.exitFullscreen(); else if (el.requestFullscreen) el.requestFullscreen(); }
+  function toggleFs() { var el = $("#slShow"); if (!el) return; if (document.fullscreenElement) document.exitFullscreen(); else enterFs(el); }
   function onShowClick(e) {
     if (e.target.closest("[data-aud]")) return;
     var ik = e.target.closest("[data-ink]"), ic = e.target.closest("[data-ink-col]");
