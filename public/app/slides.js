@@ -194,7 +194,7 @@
     box.innerHTML = stageHTML(c.slides[c.idx], { assets: c.assets, all: true, edit: true }); fit(box); markSel();
     var th = $$("#slThumbs .sl-th")[c.idx]; if (th) { var f = $(".sl-fit", th); f.innerHTML = stageHTML(c.slides[c.idx], { assets: c.assets, all: true, edit: true }); fit(f); }
   }
-  function redrawProps() { var p = $("#slProps"); if (p) p.innerHTML = propsHTML(); }
+  function redrawProps() { var p = $("#slProps"); if (p) { p.innerHTML = propsHTML(); wireProps(p); } }
   function markSel() {
     var c = SL.cur, box = $("#slCanvas"); if (!box || box.getAttribute("data-edit") !== "1") return;
     $$(".sl-it", box).forEach(function (n) { n.classList.toggle("sel", n.getAttribute("data-id") === c.sel); var h = $(".sl-rs", n); if (h) h.remove(); });
@@ -246,6 +246,10 @@
   function wireApp(el) {
     var cv = $("#slCanvas", el);
     if (cv && cv.getAttribute("data-edit") === "1") { markSel(); cv.addEventListener("pointerdown", onDown); }
+    wireProps(el);
+  }
+  /* the properties panel is re-rendered whenever the selection changes, so its fields must be wired again each time */
+  function wireProps(el) {
     $$("input[data-sl-file]", el).forEach(function (inp) { inp.addEventListener("change", onFile); });
     $$("[data-sl-in]", el).forEach(function (n) {
       n.addEventListener(n.tagName === "SELECT" ? "change" : "input", function () { setIn(n); });
