@@ -145,6 +145,16 @@
   }
 
   /* ------------------------------------------------------------ editor: properties panel */
+  /* selection: c.sel is the main item; c.more holds the others of a multi-selection (valid only while c.sel is still the anchor it was made with) */
+  function selIds() {
+    var c = SL.cur; if (!c || !c.sel) return [];
+    var ids = [c.sel]; if (c.more && c.moreAnchor === c.sel && c.moreIdx === c.idx) c.more.forEach(function (i) { if (ids.indexOf(i) < 0) ids.push(i); });
+    var have = {}; c.slides[c.idx].items.forEach(function (i) { have[i.id] = 1; });
+    return ids.filter(function (i) { return have[i]; });
+  }
+  function selItems() { var ids = selIds(); return SL.cur ? SL.cur.slides[SL.cur.idx].items.filter(function (i) { return ids.indexOf(i.id) >= 0; }) : []; }
+  function setSelIds(ids) { var c = SL.cur; c.sel = ids.length ? ids[ids.length - 1] : null; c.more = ids.slice(0, -1); c.moreAnchor = c.sel; c.moreIdx = c.idx; }
+  var clip = null; /* items copied with Ctrl+C, kept across slides */
   function selItem() { var c = SL.cur; if (!c || !c.sel) return null; return c.slides[c.idx].items.filter(function (i) { return i.id === c.sel; })[0] || null; }
   function colorSel(name, val, withNone) {
     return '<div class="sl-sw" data-name="' + name + '">' + (withNone ? '<button type="button" class="sw none' + (!val ? " on" : "") + '" data-sl="color" data-name="' + name + '" data-v="" title="None">&times;</button>' : "") +
@@ -157,7 +167,18 @@
     var slideP = '<div class="sl-pg"><b>This slide</b><div class="sl-row"><label>Background</label>' + colorSel("bg", slide.bg, false) + "</div>" +
       '<div class="sl-row"><label for="slTr">Transition</label><select id="slTr" data-sl-in="tr"><option value="fade"' + (slide.tr === "fade" ? " selected" : "") + '>Fade</option><option value="push"' + (slide.tr === "push" ? " selected" : "") + '>Slide in</option><option value="zoom"' + (slide.tr === "zoom" ? " selected" : "") + '>Zoom</option><option value="none"' + (slide.tr === "none" ? " selected" : "") + ">None</option></select></div>" +
       '<div class="sl-row col"><label for="slNote">Teacher notes (students never see these)</label><textarea id="slNote" data-sl-in="note" rows="5">' + E(c.notes[slide.id] || "") + "</textarea></div></div>";
-    if (!it) return add + '<p class="hint">Click an item to select it. Double-click text to type on the slide. Drag to move, pull the corner to resize.</p>' + slideP;
+    if (!it) return add + '<p class="hint">Click an item to select it. Hold Ctrl and click to select several. Double-click text to type on the slide. Drag to move, pull the corner to resize. Ctrl+C and Ctrl+V copy and paste.</p>' + slideP;
+    var many = selItems();
+    if (many.length > 1) {
+      var f0 = many[0], fx0 = (f0.fx || "fade");
+      return add + '<div class="sl-pg"><b>' + many.length + ' items selected</b>' +
+        '<div class="sl-row"><label>Text colour</label>' + colorSel("tc", "", false) + "</div>" +
+        '<div class="sl-row"><label>Fill</label>' + colorSel("fill", "", true) + "</div>" +
+        '<div class="sl-row"><label>Outline</label>' + colorSel("line", "", true) + "</div>" +
+        '<div class="sl-row"><label for="slStep">Appears on click no.</label><input id="slStep" type="number" min="0" max="40" value="' + (f0.step || 0) + '" data-sl-in="step"><select data-sl-in="fx" aria-label="Animation"><option value="fade"' + (fx0 === "fade" ? " selected" : "") + '>Fade</option><option value="up"' + (fx0 === "up" ? " selected" : "") + '>Rise</option><option value="zoom"' + (fx0 === "zoom" ? " selected" : "") + '>Pop</option><option value="none"' + (fx0 === "none" ? " selected" : "") + ">Appear</option></select></div>" +
+        '<p class="hint">Drag to move them together. Arrow keys nudge them. Ctrl+C then Ctrl+V copies them. Ctrl and click an item to add it or take it out.</p>' +
+        '<div class="sl-row"><button type="button" class="btn sm sec" data-sl="dupitem">Duplicate</button><button type="button" class="btn sm sec" data-sl="front">Bring to front</button><button type="button" class="btn sm sec" data-sl="back">Send back</button><button type="button" class="btn sm danger" data-sl="delitem">Delete</button></div></div>' + slideP;
+    }
     var h = add + '<div class="sl-pg"><b>' + (it.t === "text" ? "Text" : it.t === "box" ? "Box" : it.t === "img" ? "Picture" : "Audio") + "</b>";
     if (it.t === "text" || it.t === "box") {
       var first = it.paras && it.paras[0] && it.paras[0].runs[0] || {};
@@ -197,8 +218,9 @@
   function redrawProps() { var p = $("#slProps"); if (p) { p.innerHTML = propsHTML(); wireProps(p); } }
   function markSel() {
     var c = SL.cur, box = $("#slCanvas"); if (!box || box.getAttribute("data-edit") !== "1") return;
-    $$(".sl-it", box).forEach(function (n) { n.classList.toggle("sel", n.getAttribute("data-id") === c.sel); var h = $(".sl-rs", n); if (h) h.remove(); });
-    var n = c.sel && $('.sl-it[data-id="' + c.sel + '"]', box);
+    var ids = selIds();
+    $$(".sl-it", box).forEach(function (n) { n.classList.toggle("sel", ids.indexOf(n.getAttribute("data-id")) >= 0); var h = $(".sl-rs", n); if (h) h.remove(); });
+    var n = ids.length === 1 && $('.sl-it[data-id="' + c.sel + '"]', box);
     if (n) { var h = document.createElement("span"); h.className = "sl-rs"; n.appendChild(h); }
     animBadges(box);
   }
@@ -227,12 +249,14 @@
   }
   function eachRun(it, fn) { (it.paras || []).forEach(function (p) { p.runs.forEach(fn); }); }
   function setCol(name, v) {
-    var c = SL.cur, it = selItem(); snap();
+    var c = SL.cur, its = selItems(); snap();
     if (name === "bg") curSlide().bg = v;
-    else if (!it) return;
-    else if (name === "tc") eachRun(it, function (r) { r.c = v; });
-    else if (name === "fill") it.fill = v || null;
-    else if (name === "line") { if (v) { it.line = v; it.lw = it.lw || 2; } else { delete it.line; } }
+    else if (!its.length) return;
+    else its.forEach(function (it) {
+      if (name === "tc") eachRun(it, function (r) { r.c = v; });
+      else if (name === "fill") it.fill = v || null;
+      else if (name === "line") { if (v) { it.line = v; it.lw = it.lw || 2; } else { delete it.line; } }
+    });
     dirty(); redrawCanvas(); redrawProps();
   }
   function setIn(el) {
@@ -241,6 +265,7 @@
     if (k === "tr") { snap(); curSlide().tr = v; dirty(); return; }
     if (!it) return;
     if (el.getAttribute("data-typing") !== "1") { snap(); el.setAttribute("data-typing", "1"); }
+    if (k === "step" || k === "fx") { selItems().forEach(function (o) { if (k === "step") o.step = Math.max(0, parseInt(v, 10) || 0); else o.fx = v; }); dirty(); redrawCanvas(); return; }
     if (k === "text") setText(it, v);
     else if (k === "size") eachRun(it, function (r) { r.sz = Math.max(6, Number(v) || 18); });
     else if (k === "align") (it.paras || []).forEach(function (p) { p.al = v; });
@@ -274,12 +299,20 @@
       if (itEl && itEl === editing.n) return; /* clicking inside the text being edited: let the caret move */
       finishEdit(); tgt = document.elementFromPoint(e.clientX, e.clientY) || tgt; itEl = tgt.closest && tgt.closest(".sl-it");
     }
-    if (!itEl) { if (c.sel) { c.sel = null; markSel(); redrawProps(); } return; }
+    var multiKey = e.ctrlKey || e.metaKey || e.shiftKey;
+    if (!itEl) { if (c.sel && !multiKey) { c.sel = null; markSel(); redrawProps(); } return; }
     var id = itEl.getAttribute("data-id"), it = curSlide().items.filter(function (i) { return i.id === id; })[0]; if (!it) return;
     if (tgt.closest(".sl-aud")) e.preventDefault();
-    var selChanged = c.sel !== id; c.sel = id; markSel(); if (selChanged) redrawProps();
-    var resize = !!tgt.closest(".sl-rs");
-    drag = { it: it, resize: resize, sx: e.clientX, sy: e.clientY, ox: it.x, oy: it.y, ow: it.w, oh: it.h, scale: scale, moved: false, el: itEl };
+    var ids = selIds();
+    if (multiKey) { /* Ctrl or Shift + click: add the item to the selection, or take it out */
+      var at = ids.indexOf(id); if (at >= 0) ids.splice(at, 1); else ids.push(id);
+      setSelIds(ids); markSel(); redrawProps(); e.preventDefault(); return;
+    }
+    var inGroup = ids.length > 1 && ids.indexOf(id) >= 0; /* pressing on an item of the selection keeps it and drags them all */
+    if (!inGroup) { var selChanged = c.sel !== id || ids.length > 1; setSelIds([id]); markSel(); if (selChanged) redrawProps(); }
+    var resize = !inGroup && !!tgt.closest(".sl-rs");
+    var group = (inGroup ? selItems() : [it]).map(function (o) { return { it: o, ox: o.x, oy: o.y, el: $('.sl-it[data-id="' + o.id + '"]', cv) }; });
+    drag = { it: it, group: group, inGroup: inGroup, resize: resize, sx: e.clientX, sy: e.clientY, ox: it.x, oy: it.y, ow: it.w, oh: it.h, scale: scale, moved: false, el: itEl };
     cv.setPointerCapture && cv.setPointerCapture(e.pointerId);
     cv.addEventListener("pointermove", onMove); cv.addEventListener("pointerup", onUp); cv.addEventListener("pointercancel", onUp);
     e.preventDefault();
@@ -300,7 +333,7 @@
     var c = SL.cur, t = document.elementFromPoint(e.clientX, e.clientY), n = t && t.closest && t.closest(".sl-it"); /* the canvas holds pointer capture, so e.target is the canvas */ if (!c || c.mode !== "edit" || !n) return;
     var id = n.getAttribute("data-id"), it = curSlide().items.filter(function (i) { return i.id === id; })[0];
     if (!it || (it.t !== "text" && it.t !== "box") || (editing && editing.n === n)) return;
-    drag = null; if (c.sel !== id) { c.sel = id; markSel(); redrawProps(); }
+    drag = null; if (c.sel !== id || selIds().length > 1) { setSelIds([id]); markSel(); redrawProps(); }
     startEdit(n, it);
   }
   function startEdit(n, it) {
@@ -343,12 +376,13 @@
     if (!drag.moved) { snap(); drag.moved = true; }
     var g = function (v) { return Math.round(v * 20) / 20; };
     if (drag.resize) { drag.it.w = Math.max(0.3, g(drag.ow + dx)); drag.it.h = Math.max(0.2, g(drag.oh + dy)); }
-    else { drag.it.x = g(drag.ox + dx); drag.it.y = g(drag.oy + dy); }
-    var n = drag.el; n.style.left = drag.it.x * PX + "px"; n.style.top = drag.it.y * PX + "px"; n.style.width = drag.it.w * PX + "px"; n.style.height = drag.it.h * PX + "px";
+    else drag.group.forEach(function (o) { o.it.x = g(o.ox + dx); o.it.y = g(o.oy + dy); });
+    (drag.resize ? [{ it: drag.it, el: drag.el }] : drag.group).forEach(function (o) { var n = o.el; if (!n) return; n.style.left = o.it.x * PX + "px"; n.style.top = o.it.y * PX + "px"; n.style.width = o.it.w * PX + "px"; n.style.height = o.it.h * PX + "px"; });
   }
   function onUp(e) {
     var cv = e.currentTarget; cv.removeEventListener("pointermove", onMove); cv.removeEventListener("pointerup", onUp); cv.removeEventListener("pointercancel", onUp);
     if (drag && drag.moved) { dirty(); redrawCanvas(); redrawProps(); }
+    else if (drag && drag.inGroup) { setSelIds([drag.it.id]); markSel(); redrawProps(); } /* a plain click on one of several selected items selects just that one */
     drag = null;
   }
   document.addEventListener("keydown", function (e) {
@@ -359,11 +393,16 @@
     if (e.key === "Escape") { closeApp(); return; }
     if (e.key === "ArrowRight" && !c.sel) { go(1); return; }
     if (e.key === "ArrowLeft" && !c.sel) { go(-1); return; }
-    var it = selItem();
+    var it = selItem(), mod = e.ctrlKey || e.metaKey, ek = (e.key || "").toLowerCase();
+    if (c.mode === "edit") {
+      if (mod && ek === "v") { e.preventDefault(); pasteItems(); return; }
+      if (mod && ek === "a") { e.preventDefault(); var all = curSlide().items.map(function (i) { return i.id; }); setSelIds(all); markSel(); redrawProps(); return; }
+      if (mod && (ek === "c" || ek === "x") && it) { e.preventDefault(); copyItems(ek === "x"); return; }
+    }
     if (it && c.mode === "edit") {
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); delItem(); return; }
       var st = e.shiftKey ? 0.25 : 0.05, m = { ArrowLeft: ["x", -st], ArrowRight: ["x", st], ArrowUp: ["y", -st], ArrowDown: ["y", st] }[e.key];
-      if (m) { e.preventDefault(); snap(); it[m[0]] = Math.round((it[m[0]] + m[1]) * 20) / 20; dirty(); redrawCanvas(); redrawProps(); }
+      if (m) { e.preventDefault(); snap(); selItems().forEach(function (o) { o[m[0]] = Math.round((o[m[0]] + m[1]) * 20) / 20; }); dirty(); redrawCanvas(); redrawProps(); }
     }
   });
 
@@ -416,7 +455,23 @@
 
   /* ------------------------------------------------------------ actions */
   function go(d) { var c = SL.cur, n = c.idx + d; if (n < 0 || n >= c.slides.length) return; c.idx = n; c.sel = null; refreshApp(); }
-  function delItem() { var c = SL.cur, s = curSlide(); if (!c.sel) return; snap(); s.items = s.items.filter(function (i) { return i.id !== c.sel; }); c.sel = null; dirty(); redrawCanvas(); redrawProps(); }
+  function delItem() { var c = SL.cur, s = curSlide(), ids = selIds(); if (!ids.length) return; snap(); s.items = s.items.filter(function (i) { return ids.indexOf(i.id) < 0; }); c.sel = null; dirty(); redrawCanvas(); redrawProps(); }
+  /* copy, cut and paste items (also onto another slide) */
+  function copyItems(cut) {
+    var its = selItems(); if (!its.length) return;
+    clip = { items: clone(its), n: 0 };
+    if (cut) { delItem(); toast(its.length > 1 ? "Cut " + its.length + " items." : "Cut."); } else toast(its.length > 1 ? "Copied " + its.length + " items." : "Copied.");
+  }
+  function pasteItems() {
+    var c = SL.cur; if (!clip || !clip.items.length) return;
+    clip.n++; var off = Math.min(clip.n, 8) * 0.3, ids = [], s = curSlide(), put = [];
+    clip.items.forEach(function (o) {
+      if ((o.t === "img" || o.t === "audio") && o.src && !c.assets[o.src]) return; /* its file belongs to another deck */
+      var d = clone(o); d.id = sid(); d.x = Math.round(Math.max(0, Math.min(13.33 - d.w, d.x + off)) * 20) / 20; d.y = Math.round(Math.max(0, Math.min(7.5 - d.h, d.y + off)) * 20) / 20; put.push(d); ids.push(d.id);
+    });
+    if (!put.length) return toast("Those items can't be pasted into this deck.");
+    snap(); put.forEach(function (d) { s.items.push(d); }); setSelIds(ids); dirty(); redrawCanvas(); redrawProps();
+  }
   function undo() {
     var c = SL.cur; if (!c.undo.length) { toast("Nothing to undo."); return; }
     var s = JSON.parse(c.undo.pop()); c.slides = s.slides; c.notes = s.notes; c.idx = Math.min(s.idx, s.slides.length - 1); c.sel = null; dirty(); refreshApp();
@@ -454,8 +509,8 @@
     if (a === "up" || a === "down") { var j = c.idx + (a === "up" ? -1 : 1); if (j < 0 || j >= c.slides.length) return; snap(); var t = c.slides[c.idx]; c.slides[c.idx] = c.slides[j]; c.slides[j] = t; c.idx = j; dirty(); return refreshApp(); }
     if (a === "addtext" || a === "addbox") { snap(); var it = newItem(a === "addtext" ? "text" : "box"); curSlide().items.push(it); c.sel = it.id; dirty(); redrawCanvas(); return redrawProps(); }
     if (a === "delitem") return delItem();
-    if (a === "dupitem") { var s0 = selItem(); if (!s0) return; snap(); var d = clone(s0); d.id = sid(); d.x += 0.3; d.y += 0.3; curSlide().items.push(d); c.sel = d.id; dirty(); redrawCanvas(); return redrawProps(); }
-    if (a === "front" || a === "back") { var s1 = selItem(); if (!s1) return; snap(); var arr = curSlide().items; arr.splice(arr.indexOf(s1), 1); if (a === "front") arr.push(s1); else arr.unshift(s1); dirty(); return redrawCanvas(); }
+    if (a === "dupitem") { var s0 = selItems(); if (!s0.length) return; snap(); var nids = []; s0.forEach(function (o) { var d = clone(o); d.id = sid(); d.x += 0.3; d.y += 0.3; curSlide().items.push(d); nids.push(d.id); }); setSelIds(nids); dirty(); redrawCanvas(); return redrawProps(); }
+    if (a === "front" || a === "back") { var s1 = selItems(); if (!s1.length) return; snap(); var arr = curSlide().items.filter(function (i) { return s1.indexOf(i) < 0; }); curSlide().items = a === "front" ? arr.concat(s1) : s1.concat(arr); dirty(); return redrawCanvas(); }
     if (a === "bold") { var s2 = selItem(); if (!s2) return; snap(); var on = !(s2.paras && s2.paras[0] && s2.paras[0].runs[0] && s2.paras[0].runs[0].b); eachRun(s2, function (r) { if (on) r.b = 1; else delete r.b; }); dirty(); redrawCanvas(); return redrawProps(); }
     if (a === "color") return setCol(b.getAttribute("data-name"), b.getAttribute("data-v"));
     if (a === "rmaudio") { var s3 = selItem(); if (!s3) return; snap(); s3.src = null; dirty(); redrawCanvas(); return redrawProps(); }
