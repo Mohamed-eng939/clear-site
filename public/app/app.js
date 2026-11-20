@@ -687,7 +687,7 @@
     var bar = '<div class="acts noprint" style="margin:18px 0"><button type="button" class="btn sec sm" data-act="' + (admin ? "open" : "go") + '" data-id="' + c.s.id + '" data-v="me">' + (admin ? "Back to " + esc(c.s.full_name) : "Back") + "</button>" +
       '<button type="button" class="btn sm" data-act="print">Save as PDF</button><button type="button" class="btn sm" data-act="dlpng" data-id="' + id + '">Download image</button><button type="button" class="btn sec sm" data-act="copyr" data-id="' + id + '">Copy as text</button></div>' +
       '<p class="hint noprint" style="margin:-6px 0 14px">Save as PDF opens the print window. Choose "Save as PDF" as the printer. The image is ready to send on WhatsApp.</p>';
-    return bar + receiptCard(c);
+    return bar + (admin ? thanksBox(c, id) : "") + receiptCard(c);
   }
   function wrapText(x, text, maxW) {
     var words = String(text).split(/\s+/), lines = [], line = "";
@@ -751,6 +751,66 @@
       out.getContext("2d").drawImage(cv, 0, 0);
       return new Promise(function (ok) { out.toBlob(ok, "image/png"); });
     });
+  }
+
+  /* ---- receipt as a real PDF file (one A4 page holding the receipt image), and the thank-you message */
+  function buildPdf(jpg, w, h) {
+    var PW = 595, PH = 842, M = 36, sc = Math.min((PW - 2 * M) / w, (PH - 2 * M) / h), dw = w * sc, dh = h * sc, dx = (PW - dw) / 2, dy = PH - M - dh;
+    var enc = new TextEncoder(), parts = [], len = 0, offs = [];
+    function put(x) { var u = typeof x === "string" ? enc.encode(x) : x; parts.push(u); len += u.length; }
+    function obj(n, body) { offs[n] = len; put(n + " 0 obj\n" + body + "\nendobj\n"); }
+    put("%PDF-1.4\n");
+    obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    obj(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    obj(3, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + PW + " " + PH + "] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>");
+    offs[4] = len; put("4 0 obj\n<< /Type /XObject /Subtype /Image /Width " + w + " /Height " + h + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + jpg.length + " >>\nstream\n"); put(jpg); put("\nendstream\nendobj\n");
+    var cs = "q " + dw.toFixed(2) + " 0 0 " + dh.toFixed(2) + " " + dx.toFixed(2) + " " + dy.toFixed(2) + " cm /Im0 Do Q";
+    obj(5, "<< /Length " + cs.length + " >>\nstream\n" + cs + "\nendstream");
+    var xr = len; put("xref\n0 6\n0000000000 65535 f \n");
+    for (var i = 1; i <= 5; i++) put(("0000000000" + offs[i]).slice(-10) + " 00000 n \n");
+    put("trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n" + xr + "\n%%EOF");
+    return new Blob(parts, { type: "application/pdf" });
+  }
+  function receiptPDF(c) {
+    return receiptPNG(c).then(function (png) { return createImageBitmap(png); }).then(function (bm) {
+      var cv = document.createElement("canvas"); cv.width = bm.width; cv.height = bm.height;
+      var g = cv.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(bm, 0, 0);
+      return new Promise(function (ok) { cv.toBlob(ok, "image/jpeg", 0.92); }).then(function (jb) {
+        return jb.arrayBuffer().then(function (buf) { return buildPdf(new Uint8Array(buf), cv.width, cv.height); });
+      });
+    });
+  }
+  function receiptFileName(c, ext) { return c.p.receipt_no + "-" + c.s.full_name.replace(/[^\w]+/g, "-") + "." + ext; }
+  function thanksText(c, lang) {
+    var s = c.s, p = c.p, pkg = c.pkg, ar = lang === "ar", first = String(s.full_name || "").split(/\s+/)[0] || "";
+    var pr = pkg ? (PRICES[pkg.program] || {}) : {}, prog = ar ? pr.ar : pr.name;
+    var bn = balanceNote(p, pkg), full = /paid in full/i.test(bn), left = bn.replace(/^Balance remaining /, "");
+    var L = ar ? [
+      "أهلاً " + first + "،",
+      "شكراً لاختيارك CLEAR English Academy. استلمت دفعتك" + (prog ? " لبرنامج " + prog : "") + " وأرفقت لك الإيصال رقم " + p.receipt_no + ".",
+      bn ? (full ? "تم سداد الباقة بالكامل." : "المتبقي من الباقة: " + left + ".") : "",
+      "أتطلع للعمل معك، ولو عندك أي سؤال راسلني هنا في أي وقت.",
+      "محمد", "CLEAR English Academy"
+    ] : [
+      "Hi " + first + ",",
+      "Thank you for choosing CLEAR English Academy. I have received your payment" + (prog ? " for " + prog : "") + " and attached your receipt (" + p.receipt_no + ").",
+      bn ? (full ? "Your package is paid in full." : "The remaining balance is " + left + ".") : "",
+      "I am looking forward to working with you. If you have any question, message me here at any time.",
+      "Mohamed", "CLEAR English Academy"
+    ];
+    return L[0] + "\n\n" + L[1] + (L[2] ? "\n" + L[2] : "") + "\n\n" + L[3] + "\n\n" + L[4] + "\n" + L[5];
+  }
+  function thanksBox(c, id) {
+    var lang = UI.thxLang === "ar" ? "ar" : "en", s = c.s, wa = waLink(s.phone);
+    return '<div class="panel noprint" id="thxbox"><div><h2>Send a thank-you with the receipt</h2><p class="hint">Edit the message if you like, then send it together with the receipt as a PDF.</p></div>' +
+      '<div class="fields"><div class="f"><label for="thxl">Language</label><select id="thxl" data-change="thxlang"><option value="en"' + (lang === "en" ? " selected" : "") + '>English</option><option value="ar"' + (lang === "ar" ? " selected" : "") + ">العربية</option></select></div>" +
+      '<div class="f wide"><label for="thxt">Message</label><textarea id="thxt" dir="auto" style="min-height:210px">' + esc(thanksText(c, lang)) + "</textarea></div></div>" +
+      '<div class="acts"><button type="button" class="btn" data-act="thxsend" data-id="' + id + '">Send message with PDF receipt</button>' +
+      '<button type="button" class="btn sec sm" data-act="thxpdf" data-id="' + id + '">Download PDF only</button>' +
+      (wa ? '<button type="button" class="btn sec sm" data-act="thxwa" data-id="' + id + '">WhatsApp, message only</button>' : "") +
+      (s.email ? '<button type="button" class="btn sec sm" data-act="thxmail" data-id="' + id + '">Email, message only</button>' : "") +
+      '<button type="button" class="btn sec sm" data-act="thxcopy">Copy message</button></div>' +
+      '<p class="hint">' + (wa ? "" : "This student has no phone number saved, so WhatsApp cannot open. ") + "On a phone, the first button opens the share sheet with the PDF and the message together. On a computer without file sharing, it downloads the PDF and opens WhatsApp with the message ready; attach the PDF with the paperclip. WhatsApp and email cannot attach files from a link.</p></div>";
   }
 
   /* ---- weekly schedule: pick the days once, the lessons are built from it */
@@ -2085,6 +2145,7 @@
   function academicChange(t, ch) {
     if (ch === "importpick") { importPick(t); return true; }
     if (ch === "calteacher") { UI.schedTeacher = t.value; render(); return true; }
+    if (ch === "thxlang") { UI.thxLang = t.value; render(); return true; }
     if (ch === "acprog") { UI.acProg = t.value; render(); return true; }
     if (ch === "curstatus") {
       act(sb.from("cur_lessons").update({ status: t.value, updated_at: new Date().toISOString() }).eq("id", t.getAttribute("data-id")).select("id")).then(function (rows) {
@@ -2247,6 +2308,29 @@
     });
     if (a === "openreceipt") { location.hash = "#/receipt/" + id; return; }
     if (a === "copyr") { var c1 = payContext(id); return copyText(c1 && c1.s ? receiptText(c1.p, c1.s, c1.pkg) : ""); }
+    if (a === "thxcopy") { var tc = $("#thxt"); return copyText(tc ? tc.value : ""); }
+    if (a === "thxwa" || a === "thxmail") {
+      var cw = payContext(id), tw = $("#thxt"); if (!cw || !cw.s || !tw) return;
+      if (a === "thxwa") { var lk = waLink(cw.s.phone); if (lk) window.open(lk + "?text=" + encodeURIComponent(tw.value), "_blank", "noopener"); return; }
+      window.location.href = "mailto:" + encodeURIComponent(cw.s.email) + "?subject=" + encodeURIComponent("Your CLEAR receipt " + cw.p.receipt_no) + "&body=" + encodeURIComponent(tw.value); return;
+    }
+    if (a === "thxpdf" || a === "thxsend") {
+      var cp = payContext(id), tp = $("#thxt"); if (!cp || !cp.s) return;
+      var msg = tp ? tp.value : "";
+      return receiptPDF(cp).then(function (blob) {
+        if (!blob) throw new Error("no pdf");
+        var name = receiptFileName(cp, "pdf");
+        if (a === "thxpdf") { downloadBlob(name, blob); return; }
+        var file = new File([blob], name, { type: "application/pdf" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          return navigator.share({ files: [file], text: msg }).catch(function (e) { if (e && e.name !== "AbortError") throw e; });
+        }
+        downloadBlob(name, blob);
+        var lk2 = waLink(cp.s.phone);
+        if (lk2) { window.open(lk2 + "?text=" + encodeURIComponent(msg), "_blank", "noopener"); toast("PDF downloaded. In WhatsApp, attach it with the paperclip and send."); }
+        else { copyText(msg); toast("PDF downloaded and message copied. Paste it into your message."); }
+      }).catch(function () { toast("Could not make the PDF here. Use Download image instead.", true); });
+    }
     if (a === "dlpng") {
       var c2 = payContext(id); if (!c2 || !c2.s) return;
       return receiptPNG(c2).then(function (blob) { if (!blob) throw new Error("no image"); downloadBlob(c2.p.receipt_no + "-" + c2.s.full_name.replace(/[^\w]+/g, "-") + ".png", blob); }).catch(function () { toast("Could not make the image here. Use Save as PDF instead.", true); });
