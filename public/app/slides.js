@@ -395,7 +395,6 @@
     if (e.key === "ArrowLeft" && !c.sel) { go(-1); return; }
     var it = selItem(), mod = e.ctrlKey || e.metaKey, ek = (e.key || "").toLowerCase();
     if (c.mode === "edit") {
-      if (mod && ek === "v") { e.preventDefault(); pasteItems(); return; }
       if (mod && ek === "a") { e.preventDefault(); var all = curSlide().items.map(function (i) { return i.id; }); setSelIds(all); markSel(); redrawProps(); return; }
       if (mod && (ek === "c" || ek === "x") && it) { e.preventDefault(); copyItems(ek === "x"); return; }
     }
@@ -405,6 +404,27 @@
       if (m) { e.preventDefault(); snap(); selItems().forEach(function (o) { o[m[0]] = Math.round((o[m[0]] + m[1]) * 20) / 20; }); dirty(); redrawCanvas(); redrawProps(); }
     }
   });
+
+  /* Ctrl+V while editing: slide items copied here, or a picture or text from anywhere else on the computer */
+  window.addEventListener("blur", function () { if (clip) clip.away = true; });
+  document.addEventListener("paste", function (e) {
+    var c = SL.cur; if (!c || !$("#slApp") || SL.show || c.mode !== "edit") return;
+    var t = e.target; if (t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName || ""))) return;
+    var cd = e.clipboardData; if (!cd) return;
+    var file = null; Array.prototype.forEach.call(cd.items || [], function (i) { if (!file && i.kind === "file" && /^image\//.test(i.type)) file = i.getAsFile(); });
+    var text = (cd.getData("text/plain") || "").replace(/\r/g, "");
+    e.preventDefault();
+    if (clip && clip.items.length && !clip.away) return pasteItems(); /* just copied inside the editor */
+    if (file) { onFile({ target: { getAttribute: function () { return "img"; }, files: [file], value: "" } }); return; }
+    if (text.trim()) { pasteText(text); return; }
+    if (clip && clip.items.length) pasteItems(); else toast("Nothing to paste. Copy a picture or some text first.");
+  });
+  function pasteText(text) {
+    var c = SL.cur, it = newItem("text"), lines = text.replace(/\s+$/, "").split("\n"), rows = 0;
+    lines.forEach(function (ln) { rows += Math.max(1, Math.ceil(ln.length / 48)); });
+    it.w = lines.length === 1 && text.length < 30 ? 5 : 8; it.h = Math.min(6, Math.round((rows * 0.45 + 0.15) * 20) / 20); it.y = 1.6;
+    snap(); setText(it, lines.join("\n")); curSlide().items.push(it); c.sel = it.id; dirty(); redrawCanvas(); redrawProps(); toast("Text pasted.");
+  }
 
   /* ------------------------------------------------------------ files: pictures and audio */
   function fileToImage(file) {
