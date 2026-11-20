@@ -562,15 +562,23 @@
   var INKC = ["#E63946", "#16181D", "#2B7FFF", "#1A9E5A", "#FFD84D", "#FFFFFF"], inkCur = null;
   function inkInit(el) {
     var sh = SL.show; sh.ink = {}; sh.tool = null; sh.col = INKC[0];
-    var bar = '<button type="button" class="btn sm sec" data-ink="pen" title="Pen (P)">Pen</button><button type="button" class="btn sm sec" data-ink="hl" title="Highlighter (H)">Marker</button>' +
+    var bar = '<button type="button" class="ink-hide" data-ink="hide" title="Hide the tools (Esc stops drawing)" aria-label="Hide the drawing tools">&#8249;</button><button type="button" class="btn sm sec" data-ink="pen" title="Pen (P)">Pen</button><button type="button" class="btn sm sec" data-ink="hl" title="Highlighter (H)">Marker</button>' +
       '<button type="button" class="btn sm sec" data-ink="erase" title="Eraser (E)">Eraser</button><button type="button" class="btn sm sec" data-ink="laser" title="Laser pointer (L)">Laser</button><div class="sl-ink-sw">' +
       INKC.map(function (c, i) { return '<button type="button" class="sw' + (i === 0 ? " on" : "") + '" style="background:' + c + '" data-ink-col="' + c + '" aria-label="Ink colour ' + (i + 1) + '"></button>'; }).join("") +
-      '</div><button type="button" class="btn sm sec" data-ink="undo" title="Undo (Ctrl+Z)">Undo</button><button type="button" class="btn sm sec" data-ink="clear" title="Clear this slide">Clear</button><span class="sl-ink-hint">Esc = stop drawing</span>';
-    el.insertAdjacentHTML("beforeend", '<canvas id="slInk" class="sl-ink"></canvas><div id="slLaser" class="sl-laser" hidden></div><div class="sl-ink-bar" id="slInkBar" role="toolbar" aria-label="Annotation tools">' + bar + "</div>");
+      '</div><button type="button" class="btn sm sec" data-ink="undo" title="Undo (Ctrl+Z)">Undo</button><button type="button" class="btn sm sec" data-ink="clear" title="Clear this slide">Clear</button>';
+    el.insertAdjacentHTML("beforeend", '<canvas id="slInk" class="sl-ink"></canvas><div id="slLaser" class="sl-laser" hidden></div><div class="sl-ink-bar" id="slInkBar" role="toolbar" aria-label="Annotation tools">' + bar + '</div><button type="button" class="sl-ink-tab" id="slInkTab" data-ink="showbar" title="Show the drawing tools" aria-label="Show the drawing tools" hidden>&#8250;</button>');
+    inkBarApply();
     var cv = $("#slInk");
     cv.addEventListener("pointerdown", inkDown); cv.addEventListener("pointermove", inkMove); cv.addEventListener("pointerup", inkUp); cv.addEventListener("pointercancel", inkUp);
     cv.addEventListener("pointerleave", function () { var L = $("#slLaser"); if (L) L.hidden = true; });
     cv.addEventListener("click", function (e) { e.stopPropagation(); });
+  }
+  var inkHidden = false;
+  try { inkHidden = localStorage.getItem("clear_ink_hidden") === "1"; } catch (x) { /* optional */ }
+  function inkBarApply() {
+    var b = $("#slInkBar"), t = $("#slInkTab"); if (!b || !t) return;
+    b.classList.toggle("away", inkHidden); t.hidden = !inkHidden;
+    try { localStorage.setItem("clear_ink_hidden", inkHidden ? "1" : "0"); } catch (x) { /* optional */ }
   }
   function inkXf() { var box = $("#slSbox"), s = Math.min(box.clientWidth / (W * PX), box.clientHeight / (H * PX)); return { s: s, ox: (box.clientWidth - W * PX * s) / 2, oy: (box.clientHeight - H * PX * s) / 2 }; }
   function inkPt(e) { var x = inkXf(), r = $("#slInk").getBoundingClientRect(); return [(e.clientX - r.left - x.ox) / x.s, (e.clientY - r.top - x.oy) / x.s]; }
@@ -630,9 +638,9 @@
   function onShowClick(e) {
     if (e.target.closest("[data-aud]")) return;
     var ik = e.target.closest("[data-ink]"), ic = e.target.closest("[data-ink-col]");
-    if (ik) { var ia = ik.getAttribute("data-ink"); if (ia === "undo") inkUndo(); else if (ia === "clear") inkClear(); else inkTool(ia); return; }
+    if (ik) { var ia = ik.getAttribute("data-ink"); if (ia === "hide" || ia === "showbar") { inkHidden = ia === "hide"; inkBarApply(); return; } if (ia === "undo") inkUndo(); else if (ia === "clear") inkClear(); else inkTool(ia); return; }
     if (ic) { inkColor(ic.getAttribute("data-ink-col")); return; }
-    if (e.target.closest(".sl-ink-bar")) return;
+    if (e.target.closest(".sl-ink-bar") || e.target.closest(".sl-ink-tab")) return;
     var b = e.target.closest("[data-sh]");
     if (b) { var a = b.getAttribute("data-sh"); if (a === "next") showNext(); else if (a === "prev") showPrev(); else if (a === "exit") exitShow(); else if (a === "full") toggleFs(); return; }
     if (e.target.closest(".sl-ctl")) return;
