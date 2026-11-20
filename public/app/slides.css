@@ -37,6 +37,7 @@ body.sl-open{overflow:hidden}
 .sl-aud-ph{font:600 18px/1.2 "Montserrat",sans-serif;color:#16181D;padding:0 12px}
 .sl-it.sel{outline:3px solid #2b7fff;outline-offset:1px;cursor:move}
 .sl-rs{position:absolute;right:-9px;bottom:-9px;width:18px;height:18px;background:#2b7fff;border:2px solid #fff;border-radius:4px;cursor:nwse-resize;z-index:3}
+.sl-anim{position:absolute;z-index:4;min-width:30px;height:30px;padding:0 6px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;transform:translate(-35%,-35%);background:#FFD43B;color:#16181D;border:2px solid #16181D;border-radius:6px;font:700 20px/1 Montserrat,system-ui,sans-serif;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.35)}
 .sl-props{overflow:auto;padding:12px;border-left:1px solid var(--line,#ddd);background:var(--surface,#fff);display:grid;gap:14px;align-content:start}
 .sl-pg{display:grid;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--line,#ddd)}
 .sl-add{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.sl-add b{width:100%}

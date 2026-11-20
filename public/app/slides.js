@@ -200,6 +200,18 @@
     $$(".sl-it", box).forEach(function (n) { n.classList.toggle("sel", n.getAttribute("data-id") === c.sel); var h = $(".sl-rs", n); if (h) h.remove(); });
     var n = c.sel && $('.sl-it[data-id="' + c.sel + '"]', box);
     if (n) { var h = document.createElement("span"); h.className = "sl-rs"; n.appendChild(h); }
+    animBadges(box);
+  }
+  /* editor only: a small numbered box on every item that appears on a click, like PowerPoint's animation pane.
+     The badges live on the stage (not inside the items), so they never reach the saved text, the thumbnails or the show. */
+  function animBadges(box) {
+    var stage = $(".sl-stage", box); if (!stage) return;
+    $$(".sl-anim", stage).forEach(function (b) { b.remove(); });
+    (curSlide().items || []).forEach(function (it) {
+      if (!it.step) return;
+      var b = document.createElement("span"); b.className = "sl-anim"; b.textContent = it.step;
+      b.style.left = it.x * PX + "px"; b.style.top = it.y * PX + "px"; stage.appendChild(b);
+    });
   }
   function curSlide() { return SL.cur.slides[SL.cur.idx]; }
   function newItem(t) {
