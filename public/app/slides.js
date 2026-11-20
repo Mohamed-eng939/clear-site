@@ -547,7 +547,12 @@
 
   /* ------------------------------------------------------------ audio (one player, works inside and outside the slide show) */
   var curAud = null;      // { id, label }
-  function findItem(id) { var c = SL.cur || SL.show; if (!c) return null; for (var i = 0; i < c.slides.length; i++) { var f = c.slides[i].items.filter(function (x) { return x.id === id; })[0]; if (f) return f; } return null; }
+  function findItem(id) { /* the audio item with this id, looking at the slide on screen first (item ids repeat between slides) */
+    var c = SL.cur || SL.show; if (!c) return null;
+    var n = c.slides.length, start = SL.show ? SL.show.idx : c.idx;
+    for (var k = 0; k < n; k++) { var sl = c.slides[(start + k) % n]; var f = ((sl && sl.items) || []).filter(function (x) { return x.id === id && x.t === "audio"; })[0]; if (f) return f; }
+    return null;
+  }
   function toggleAudio(itemId) {
     var c = SL.cur || SL.show, it = findItem(itemId); if (!it || !it.src) return;
     if (curAud && curAud.id === itemId && audio.src) { if (audio.paused) audio.play(); else audio.pause(); return; }
