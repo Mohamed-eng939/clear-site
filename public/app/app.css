@@ -264,3 +264,18 @@ pre.sql{margin:0;background:var(--surface);border:1px solid var(--line);border-r
 .calchip.no_show,.calchip.late_cancel,.calchip.moved{opacity:.7;text-decoration:line-through}
 .calchip.sel{outline:3px solid var(--focus)}
 @media (max-width:720px){.cal.week{grid-template-columns:1fr}.cal.week .dh{display:none}.cal .cell{min-height:60px}.cal.week .cell{min-height:0}.calchip{font-size:.66rem}}
+
+/* mock answer sheet */
+.mk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin:12px 0}
+.mk-q{display:flex;align-items:center;gap:8px;border:1.5px solid var(--line-strong);border-radius:10px;padding:4px 8px;background:var(--surface)}
+.mk-q b{min-width:24px;font:700 14px/1 var(--display);color:var(--ink-soft)}
+.mk-box{flex:1;min-width:0;border:0;background:transparent;font:600 16px/1.2 var(--body,inherit);padding:8px 2px;color:var(--ink)}
+.mk-box:focus{outline:none}
+.mk-q:focus-within{border-color:var(--ink)}
+.mk-tbl{display:grid;gap:4px}
+.mk-row{display:grid;grid-template-columns:34px minmax(0,1.4fr) minmax(0,1fr) 54px 92px 128px;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line)}
+.mk-row .mk-a{font-weight:600;overflow-wrap:anywhere}
+.mk-row .mk-k{overflow-wrap:anywhere}
+.mk-row .mk-r{font:700 12px/1 var(--display);color:var(--ink-soft)}
+.mk-row select{padding:6px 4px;font-size:13px;min-height:34px}
+@media (max-width:700px){.mk-row{grid-template-columns:30px minmax(0,1fr) 50px;}.mk-row .mk-k{display:none}.mk-row select{grid-column:span 3}}

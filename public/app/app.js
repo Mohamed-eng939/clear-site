@@ -317,6 +317,8 @@
       }).then(function () {
         if (!location.hash || location.hash === "#") location.hash = me.role === "admin" ? "#/students" : "#/me";
         if (window.CLEAR_TC) { window.CLEAR_TC.reset(); if (me.role === "admin" || me.role === "teacher") window.CLEAR_TC.ensure(); }
+        if (window.CLEAR_MK) { window.CLEAR_MK.reset(); window.CLEAR_MK.load(); }
+        if (window.CLEAR_LB) { window.CLEAR_LB.reset(); if (me.role === "admin") window.CLEAR_LB.load(); }
         if (window.CLEAR_SL) { window.CLEAR_SL.reset(); window.CLEAR_SL.load(); if (me.role === "admin") window.CLEAR_SL.runImports(); }
         render();
       }).catch(function (e) { toast(e.message, true); renderAuth(e.message); });
@@ -358,7 +360,7 @@
   function shell(inner, current) {
     var admin = me.role === "admin";
     var nav = admin
-      ? [["today", "Today"], ["students", "Students"], ["teachers", "Teachers" + (window.CLEAR_TC && window.CLEAR_TC.badge() ? " (" + window.CLEAR_TC.badge() + ")" : "")], ["lessons", "Lessons"], ["academic", "Clear Academic"], ["placement", "Placement"], ["payments", "Payments"], ["account", "Account"]]
+      ? [["today", "Today"], ["students", "Students"], ["teachers", "Teachers" + (window.CLEAR_TC && window.CLEAR_TC.badge() ? " (" + window.CLEAR_TC.badge() + ")" : "")], ["lessons", "Lessons"], ["academic", "Clear Academic"], ["library", "Library"], ["placement", "Placement"], ["payments", "Payments"], ["account", "Account"]]
       : me.role === "teacher" ? [["me", "My teaching"]] : [["me", "My learning"]];
     return '<header class="top"><div class="who">' + logo() + '<span class="label">' + (admin ? "Admin" : me.role === "teacher" ? "Teacher" : "Student") + "</span></div>" +
       '<div class="right"><span class="hint">' + esc(me.email) + '</span><button type="button" class="iconbtn" data-act="theme" aria-label="Switch to ' + (theme() === "dark" ? "light" : "dark") + ' mode">' + (theme() === "dark" ? "&#9728;" : "&#9790;") + '</button><button type="button" class="btn sec sm" data-act="signout">Sign out</button></div></header>' +
@@ -376,6 +378,8 @@
     else if (r.name === "lessons") html = shell(viewLessons(), "lessons");
     else if (r.name === "teachers" && window.CLEAR_TC) html = shell(window.CLEAR_TC.view(r), "teachers");
     else if (r.name === "academic") html = shell(viewAcademic(r.a || "plan", r.b), "academic");
+    else if (r.name === "library" && window.CLEAR_LB) html = shell(window.CLEAR_LB.view(), "library");
+    else if (r.name === "mock" && window.CLEAR_MK) html = shell(window.CLEAR_MK.view(r.a), "students");
     else if (r.name === "placement" && window.CLEAR_PL) html = shell(window.CLEAR_PL.view(r), "placement");
     else if (r.name === "payments") html = shell(viewPayments(), "payments");
     else if (r.name === "account") html = shell(viewAccount(), "account");
@@ -563,7 +567,7 @@
     if (tab === "lessons") body = lessonsSection(s, d.pkgs, d.les);
     else if (tab === "billing") body = packagesSection(s, d.pkgs, d.pays);
     else if (tab === "files") body = materialsSection(s, d.les);
-    else if (tab === "reports") body = checkpointStrip(s) + reportsSection(s, d.reps) + homeworkSection(s, d);
+    else if (tab === "reports") body = checkpointStrip(s) + reportsSection(s, d.reps) + homeworkSection(s, d) + (window.CLEAR_MK ? window.CLEAR_MK.adminPanel(s) : "");
     else if (tab === "notes") body = notesSection(s);
     else if (tab === "details") body = detailsSection(s) + dangerSection(s);
     else body = overviewTab(s, d);
@@ -1418,7 +1422,7 @@
           (l.meeting_url && l.status === "scheduled" ? '<div class="acts"><a class="btn sm" href="' + esc(l.meeting_url) + '" target="_blank" rel="noopener">Join lesson</a></div>' : "") + "</div>";
       }).join("") : '<p class="hint">Your lessons will appear here once they are scheduled.</p>') + "</div>" +
       '<p class="hint">To move a lesson, message the academy at least 24 hours before it starts. <a href="' + WHATSAPP + '" target="_blank" rel="noopener">WhatsApp the academy</a>.</p></div>' +
-      (window.CLEAR_SL ? window.CLEAR_SL.studentCards() : "") + '<div class="sec"><h3>Your materials</h3><div class="cards">' + (S.materials.filter(function (m) { return m.student_id === s.id; }).map(function (m) { return materialRow(m, false); }).join("") || '<p class="hint">Slides and handouts from your lessons will appear here.</p>') + "</div></div>" +
+      (window.CLEAR_SL ? window.CLEAR_SL.studentCards() : "") + (window.CLEAR_MK ? window.CLEAR_MK.studentCard() : "") + '<div class="sec"><h3>Your materials</h3><div class="cards">' + (S.materials.filter(function (m) { return m.student_id === s.id; }).map(function (m) { return materialRow(m, false); }).join("") || '<p class="hint">Slides and handouts from your lessons will appear here.</p>') + "</div></div>" +
       (pkgs.length ? '<div class="sec"><h3>Your package</h3><div class="cards">' + pkgs.map(function (p) {
         return '<div class="card"><div class="l1"><span class="t">' + esc(pkgLabel(p)) + '</span><span class="pill ' + (pkgIsPaid(p) ? "ok" : "warn") + '">' + (pkgIsPaid(p) ? "Paid" : "Payment due") + '</span></div><span class="hint">' + pkgUsed(p) + " of " + p.lessons_total + " lessons used" + (p.expires_on ? " · valid until " + esc(p.expires_on) : "") + "</span></div>";
       }).join("") + "</div></div>" : "") +
@@ -2200,6 +2204,7 @@
   }
   function onInput(e) {
     if (window.CLEAR_PL && window.CLEAR_PL.input(e)) return;
+    if (window.CLEAR_LB && window.CLEAR_LB.input(e)) return;
     if (e.target.id === "q") { UI.q = e.target.value; $("#list").innerHTML = studentRows(); return; }
     if (livePrices(e)) return;
     if (e.target.form && e.target.form.getAttribute("data-form") === "addpay") {
@@ -2215,6 +2220,8 @@
     if (ch === "paytoday") { UI.payToday = t.checked; return render(); }
     if (liveSchedule(e)) return;
     if (window.CLEAR_PL && window.CLEAR_PL.change(t, ch)) return;
+    if (window.CLEAR_MK && window.CLEAR_MK.change(t, ch)) return;
+    if (window.CLEAR_LB && window.CLEAR_LB.change(t, ch)) return;
     if (window.CLEAR_TC && window.CLEAR_TC.change(t, ch)) return;
     if (academicChange(t, ch)) return;
     if (ch === "viewtz") { UI.viewTz = t.value; try { localStorage.setItem("clear-viewtz", t.value); } catch (e) { /* storage blocked */ } return render(); }
@@ -2258,6 +2265,8 @@
     var b = e.target.closest("[data-act]"); if (!b) return;
     var a = b.getAttribute("data-act"), id = b.getAttribute("data-id"), v = b.getAttribute("data-v");
     if (window.CLEAR_PL && window.CLEAR_PL.click(a, id, v, b)) return;
+    if (window.CLEAR_MK && window.CLEAR_MK.click(a, id, v, b)) return;
+    if (window.CLEAR_LB && window.CLEAR_LB.click(a, id, v, b)) return;
     if (window.CLEAR_TC && window.CLEAR_TC.click(a, id, v, b)) return;
     if (window.CLEAR_SL && window.CLEAR_SL.click(a, id, v, b)) return;
     if (academicClick(a, id, v)) return;
@@ -2377,6 +2386,8 @@
     if (btn) btn.disabled = true;
     var done = function () { if (btn) btn.disabled = false; };
     if (window.CLEAR_PL && window.CLEAR_PL.submit(kind, id, d, done, form)) return;
+    if (window.CLEAR_MK && window.CLEAR_MK.submit(kind, id, d, done, form)) return;
+    if (window.CLEAR_LB && window.CLEAR_LB.submit(kind, id, d, done, form)) return;
     if (window.CLEAR_TC && window.CLEAR_TC.submit(kind, id, d, done, form)) return;
     if (academicSubmit(kind, id, d, done)) return;
     if (kind === "addstudent") {
@@ -2473,6 +2484,6 @@
   /* ------------------------------------------------------------ start */
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
   window.__clear = { esc: esc, priceFor: priceFor, role: function () { return me && me.role; }, api: function () {
-    return { sb: sb, esc: esc, toast: toast, role: function () { return me && me.role; }, zonedToMs: zonedToMs, addDays: addDays, EG: EG, dayKey: dayKey, activePackage: activePackage, lessonsList: function () { return S.lessons; }, act: act, ask: ask, unwrap: unwrap, fmtDT: fmtDT, render: render, refresh: refresh, nul: nul, logo: logo, cfgUrl: function () { return window.CLEAR_CONFIG.url; } };
+    return { sb: sb, students: function () { return S.students; }, esc: esc, toast: toast, role: function () { return me && me.role; }, zonedToMs: zonedToMs, addDays: addDays, EG: EG, dayKey: dayKey, activePackage: activePackage, lessonsList: function () { return S.lessons; }, act: act, ask: ask, unwrap: unwrap, fmtDT: fmtDT, render: render, refresh: refresh, nul: nul, logo: logo, cfgUrl: function () { return window.CLEAR_CONFIG.url; } };
   } };
 })();
