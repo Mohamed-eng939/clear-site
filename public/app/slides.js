@@ -566,11 +566,38 @@
   function syncAudioUI() {
     var playing = !audio.paused && !!curAud;
     $$("[data-aud]").forEach(function (n) { var on = playing && curAud && n.getAttribute("data-aud") === curAud.id; var ic = $(".sl-aud-ic", n); if (ic) ic.innerHTML = on ? "&#10074;&#10074;" : "&#9654;"; n.classList.toggle("playing", !!on); });
-    if (!mini) { mini = document.createElement("div"); mini.id = "slMini"; mini.className = "slmini"; mini.hidden = true; document.body.appendChild(mini);
-      mini.addEventListener("click", function (e) { var b = e.target.closest("button"); if (!b) return; if (b.getAttribute("data-m") === "pp") { if (audio.paused) audio.play(); else audio.pause(); } else { audio.pause(); audio.removeAttribute("src"); audio.load(); curAud = null; syncAudioUI(); } }); }
-    if (curAud && audio.src) { mini.hidden = false; mini.innerHTML = '<span class="sl-mini-t">' + E(curAud.label) + '</span><button type="button" class="btn sm" data-m="pp" aria-label="Play or pause">' + (playing ? "Pause" : "Play") + '</button><button type="button" class="btn sm sec" data-m="x" aria-label="Stop audio">Stop</button>'; }
-    else mini.hidden = true;
+    if (!mini) {
+      mini = document.createElement("div"); mini.id = "slMini"; mini.className = "slmini"; mini.hidden = true; document.body.appendChild(mini);
+      mini.innerHTML = '<div class="sl-mini-top"><span class="sl-mini-t"></span><button type="button" class="btn sm sec" data-m="x" aria-label="Stop audio">Stop</button></div>' +
+        '<div class="sl-mini-bar"><button type="button" class="btn sm sec" data-m="back" aria-label="Back 10 seconds">&minus;10s</button><button type="button" class="btn sm" data-m="pp" aria-label="Play or pause">Pause</button><button type="button" class="btn sm sec" data-m="fwd" aria-label="Forward 10 seconds">+10s</button>' +
+        '<span class="sl-mini-time" data-m="cur">0:00</span><input type="range" class="sl-mini-seek" min="0" max="1000" value="0" step="1" aria-label="Playback position"><span class="sl-mini-time" data-m="dur">0:00</span></div>';
+      mini.addEventListener("keydown", function (e) { e.stopPropagation(); });
+      mini.addEventListener("click", function (e) {
+        var b = e.target.closest("button"); if (!b) return; var m = b.getAttribute("data-m"), d = audio.duration || 0;
+        if (m === "pp") { if (audio.paused) audio.play(); else audio.pause(); }
+        else if (m === "back") audio.currentTime = Math.max(0, audio.currentTime - 10);
+        else if (m === "fwd") audio.currentTime = d ? Math.min(d, audio.currentTime + 10) : audio.currentTime + 10;
+        else { audio.pause(); audio.removeAttribute("src"); audio.load(); curAud = null; syncAudioUI(); }
+      });
+      var sk = mini.querySelector(".sl-mini-seek");
+      sk.addEventListener("input", function () { seeking = true; var d = audio.duration || 0; if (d) { audio.currentTime = sk.value / 1000 * d; } miniTime(); });
+      sk.addEventListener("change", function () { seeking = false; });
+      sk.addEventListener("pointerup", function () { seeking = false; });
+    }
+    if (curAud && audio.src) {
+      mini.hidden = false; mini.querySelector(".sl-mini-t").textContent = curAud.label;
+      var pp = mini.querySelector('[data-m="pp"]'); pp.textContent = playing ? "Pause" : "Play"; miniTime();
+    } else mini.hidden = true;
   }
+  var seeking = false;
+  function fmtT(t) { t = Math.max(0, Math.floor(t || 0)); var m = Math.floor(t / 60), s = t % 60; return m + ":" + (s < 10 ? "0" : "") + s; }
+  function miniTime() {
+    if (!mini || mini.hidden && !curAud) return;
+    var d = audio.duration, t = audio.currentTime || 0, fin = isFinite(d) && d > 0;
+    mini.querySelector('[data-m="cur"]').textContent = fmtT(t); mini.querySelector('[data-m="dur"]').textContent = fin ? fmtT(d) : "--:--";
+    var sk = mini.querySelector(".sl-mini-seek"); if (fin && !seeking) sk.value = String(Math.round(t / d * 1000));
+  }
+  ["timeupdate", "loadedmetadata", "durationchange", "seeked"].forEach(function (ev) { audio.addEventListener(ev, miniTime); });
   ["play", "pause", "ended", "emptied"].forEach(function (ev) { audio.addEventListener(ev, syncAudioUI); });
 
   /* ------------------------------------------------------------ slide show */
