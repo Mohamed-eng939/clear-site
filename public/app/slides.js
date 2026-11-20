@@ -737,10 +737,15 @@
       (SL.decks.map(function (d) { return deckCard(d, true); }).join("") || '<p class="hint">No slides yet.</p>') + "</div></div></div>";
   }
   /* student: decks visible to her */
-  function studentCards() {
+  function studentCards(sid) {
     load();
-    if (!SL.decks.length) return "";
-    return '<div class="sec"><h3>Your slides</h3><p class="hint">Open the slides on any device and use Slide show to present. Click or press the right arrow to move on.</p><div class="cards">' + SL.decks.map(function (d) { return deckCard(d, false); }).join("") + "</div></div>";
+    var list = SL.decks;
+    if (sid) { /* teacher preview: only what this student could see */
+      var mine = {}; (A().lessonsList() || []).forEach(function (l) { if (l.student_id === sid && l.cur_lesson_id) mine[l.cur_lesson_id] = 1; });
+      list = list.filter(function (d) { return d.visible_to_students && mine[d.cur_lesson_id]; });
+    }
+    if (!list.length) return "";
+    return '<div class="sec"><h3>Your slides</h3><p class="hint">Open the slides on any device and use Slide show to present. Click or press the right arrow to move on.</p><div class="cards">' + list.map(function (d) { return deckCard(d, false); }).join("") + "</div></div>";
   }
   function click(a, id) {
     if (a === "sl_pptx") {

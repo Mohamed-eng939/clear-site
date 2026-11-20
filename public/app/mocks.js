@@ -12,12 +12,14 @@
   var CODES = { SP: "Spelling or number slip", WL: "Over the word limit", DI: "Fell for a distractor or correction", PA: "Missed a paraphrase", LP: "Lost place in audio or text", VO: "Unknown vocabulary", TM: "Ran out of time", GU: "Guess with no evidence" };
   var LBAND = [[39, 9], [37, 8.5], [35, 8], [32, 7.5], [30, 7], [26, 6.5], [23, 6], [18, 5.5], [16, 5], [13, 4.5], [11, 4]];
   var RBAND = [[40, 9], [39, 8.5], [37, 8], [36, 7.5], [34, 7], [32, 6.5], [30, 6], [27, 5.5], [23, 5], [19, 4.5], [15, 4], [12, 3.5], [9, 3]];
-  var MK = { loaded: false, loading: false, keys: [], sheets: [], marks: {}, part: "L", saving: {} };
+  var MK = { loaded: false, loading: false, keys: [], sheets: [], marks: {}, part: "L", saving: {}, pv: {} };
+  var LIVE = { id: null, timer: null, ch: null, last: null }, deb = {};
 
   function A() { return window.__clear.api(); }
   function E(s) { return A().esc(s); }
-  function isAdmin() { return window.__clear.role() === "admin"; }
-  function sheet(id) { return MK.sheets.filter(function (s) { return s.id === id; })[0]; }
+  function isAdmin() { return window.__clear.realRole() === "admin"; }
+  function prev() { return window.__clear.previewing && window.__clear.previewing(); }
+  function sheet(id) { var f = function (s) { return s.id === id; }; return MK.sheets.filter(f)[0] || [].concat.apply([], Object.keys(MK.pv).map(function (k) { return MK.pv[k]; })).filter(f)[0]; }
   function keyOf(id) { return MK.keys.filter(function (k) { return k.id === id; })[0]; }
   function opts(map, sel) { return Object.keys(map).map(function (k) { return '<option value="' + E(k) + '"' + (k === sel ? " selected" : "") + ">" + E(k + " · " + map[k]) + "</option>"; }).join(""); }
   function partOf(id) { return PARTS.filter(function (p) { return p.id === id; })[0]; }
@@ -65,9 +67,18 @@
       return '<label class="mk-q"><b>' + q.slice(1) + '</b><input class="mk-box" data-q="' + q + '" data-change="mksave" data-sheet="' + sht.id + '" data-part="' + p.id + '" maxlength="80" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Question ' + q.slice(1) + '" value="' + E((sht.answers || {})[q] || "") + '"' + (locked ? " disabled" : "") + "></label>";
     }).join("") + "</div>";
   }
-  function studentCard() {
-    if (isAdmin() || !MK.sheets.length) return "";
-    return '<div class="sec"><h3>Your mock answer sheet</h3><div class="cards">' + MK.sheets.map(function (sht) {
+  function pvSheets(sid) {
+    if (!MK.pv[sid]) {
+      var real = MK.sheets.filter(function (x) { return x.student_id === sid; }).map(function (x) { return { id: "pv-" + x.id, student_id: sid, title: x.title + " (practice copy)", answers: {}, submitted: {}, __pv: true }; });
+      if (!real.length && MK.keys[0]) real = [{ id: "pv-demo", student_id: sid, title: MK.keys[0].title + " (practice copy)", answers: {}, submitted: {}, __pv: true }];
+      MK.pv[sid] = real;
+    }
+    return MK.pv[sid];
+  }
+  function studentCard(sid) {
+    var list = prev() && sid ? pvSheets(sid) : (isAdmin() ? [] : MK.sheets);
+    if (!list.length) return "";
+    return '<div class="sec"><h3>Your mock answer sheet</h3><div class="cards">' + list.map(function (sht) {
       var p = partOf(MK.part) || PARTS[0], locked = !!(sht.submitted && sht.submitted[p.id]);
       return '<div class="card"><div class="l1"><span class="t">' + E(sht.title) + '</span><span class="pills">' + PARTS.map(function (x) { return sht.submitted && sht.submitted[x.id] ? '<span class="pill ok">' + E(x.id === "R3" ? "Reading 28-40" : x.name.split(" ")[0] + (x.id === "R" ? " 1-27" : "")) + " sent</span>" : ""; }).join("") + "</span></div>" +
         '<p class="hint">Read the questions in your book or on your printout. Type only your answers here. Spelling counts. Your answers save as you type.</p>' +
@@ -82,6 +93,11 @@
   function stat(id, msg, bad) { var el = document.getElementById("mkstat_" + id); if (el) { el.textContent = msg; el.style.color = bad ? "var(--warn)" : ""; } }
   function save(sheetId, partId, submit) {
     var sht = sheet(sheetId); if (!sht) return Promise.resolve();
+    if (sht.__pv) {
+      Object.assign(sht.answers, collect(sheetId, partId));
+      if (submit) { sht.submitted[partId] = new Date().toISOString(); A().toast("Preview: this part is locked on the practice copy only."); A().render(); } else stat(sheetId, "Saved (practice copy)");
+      return Promise.resolve();
+    }
     stat(sheetId, "Saving…");
     return Promise.resolve(A().sb.rpc("mock_save", { p_sheet: sheetId, p_answers: collect(sheetId, partId), p_part: partId, p_submit: !!submit })).then(function (r) {
       if (r.error) throw new Error(r.error.message);
@@ -128,7 +144,7 @@
             '<select data-change="mkcode" data-sheet="' + id + '" data-q="' + q + '" aria-label="Error code for question ' + q.slice(1) + '"><option value="">Code</option>' + opts(CODES, codes[q]) + "</select></div>";
         }).join("") + "</div></div>";
     }).join("");
-    return '<div style="margin-top:18px;display:grid;gap:18px"><div class="acts" style="justify-content:space-between"><a class="btn sec sm" href="#/students/' + sht.student_id + '">&larr; ' + E(st ? st.full_name : "Back to student") + '</a><span class="hint">' + E(sht.title) + "</span></div>" +
+    return '<div style="margin-top:18px;display:grid;gap:18px"><div class="acts" style="justify-content:space-between"><a class="btn sec sm" href="#/students/' + sht.student_id + '">&larr; ' + E(st ? st.full_name : "Back to student") + '</a><span class="hint">' + E(sht.title) + '</span></div><div id="mkLive" class="acts" style="gap:10px">' + liveBar(sht) + "</div>" +
       '<div class="panel"><div id="mkSummary">' + summaryHTML(sht) + "</div></div>" +
       '<div class="panel"><details' + (nkeys < 40 ? " open" : "") + '><summary><b>Answer key (teacher only)</b> <span class="hint">' + nkeys + " of 80 entered. Accepted alternatives are separated by a slash, for example <i>colour/color</i>.</span></summary>" +
       '<form data-form="mksavekey" data-id="' + sht.mock_id + '">' + keyGrid + '<div class="acts" style="margin-top:12px"><button class="btn" type="submit">Save key</button></div></form></details></div>' +
@@ -159,7 +175,7 @@
 
   /* ------------------------------------------------------------ events */
   function change(t, ch) {
-    if (ch === "mksave") { save(t.getAttribute("data-sheet"), t.getAttribute("data-part"), false); return true; }
+    if (ch === "mksave") { clearTimeout(deb[t.getAttribute("data-sheet") + t.getAttribute("data-part")]); save(t.getAttribute("data-sheet"), t.getAttribute("data-part"), false); return true; }
     if (ch === "mkov" || ch === "mkcode") {
       var id = t.getAttribute("data-sheet"), q = t.getAttribute("data-q"), sht = sheet(id); if (!sht) return true;
       var cur = MK.marks[id] || { overrides: {}, codes: {} }, patch;
@@ -210,6 +226,42 @@
     }
     return false;
   }
+  function input(e) {
+    var t = e.target; if (!t || !t.classList || !t.classList.contains("mk-box") || t.getAttribute("data-change") !== "mksave") return false;
+    var sid = t.getAttribute("data-sheet"), part = t.getAttribute("data-part"), k = sid + part;
+    clearTimeout(deb[k]); stat(sid, "Typing…"); deb[k] = setTimeout(function () { save(sid, part, false); }, 700);
+    return true;
+  }
+  /* live view: the teacher watches the student's sheet fill in */
+  function counts(sht) { var a = sht.answers || {}; return PARTS.map(function (p) { var n = qkeys(p).filter(function (q) { return a[q]; }).length; return (p.id === "L" ? "Listening " : p.id === "R" ? "Reading 1-27 " : "Reading 28-40 ") + n + "/" + (p.hi - p.lo + 1) + (sht.submitted && sht.submitted[p.id] ? " (sent)" : ""); }).join(" · "); }
+  function liveBar(sht) { return '<span class="pill ok">Live</span> <span class="hint">' + E(counts(sht)) + (LIVE.last ? " · last change " + E(LIVE.last) : "") + "</span>"; }
+  function pull(id) {
+    Promise.resolve(A().sb.from("mock_sheets").select("answers,submitted").eq("id", id).maybeSingle()).then(function (r) {
+      if (!r || r.error || !r.data) return; var sht = sheet(id); if (!sht || LIVE.id !== id) return;
+      var old = sht.answers || {}, nw = r.data.answers || {}, changed = Object.keys(nw).filter(function (k) { return nw[k] !== old[k]; });
+      var subChanged = JSON.stringify(sht.submitted || {}) !== JSON.stringify(r.data.submitted || {});
+      sht.answers = nw; sht.submitted = r.data.submitted || {};
+      changed.forEach(function (q) {
+        var row = document.getElementById("mkr_" + q); if (!row) return;
+        var cell = row.querySelector(".mk-a"); if (nw[q]) cell.textContent = nw[q]; else cell.innerHTML = '<i class="hint">blank</i>';
+        row.classList.add("mk-flash"); setTimeout(function () { row.classList.remove("mk-flash"); }, 2200); refreshRow(sht, q);
+      });
+      if (changed.length || subChanged) { LIVE.last = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+      var bar = document.getElementById("mkLive"); if (bar) bar.innerHTML = liveBar(sht);
+    });
+  }
+  function stopLive() {
+    if (LIVE.timer) clearInterval(LIVE.timer); if (LIVE.ch) { try { A().sb.removeChannel(LIVE.ch); } catch (e) { /* ignore */ } }
+    LIVE.id = null; LIVE.timer = null; LIVE.ch = null; LIVE.last = null;
+  }
+  function startLive(id) {
+    if (LIVE.id === id) return; stopLive(); LIVE.id = id;
+    LIVE.timer = setInterval(function () { pull(id); }, 3000);
+    try { LIVE.ch = A().sb.channel("mk-" + id).on("postgres_changes", { event: "*", schema: "public", table: "mock_sheets", filter: "id=eq." + id }, function () { pull(id); }).subscribe(); } catch (e) { /* polling still runs */ }
+    pull(id);
+  }
+  function after(r) { if (r && r.name === "mock" && r.a && isAdmin() && sheet(r.a)) startLive(r.a); else stopLive(); }
+
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Enter" || !e.target || !e.target.classList || !e.target.classList.contains("mk-box")) return;
     e.preventDefault();
@@ -217,5 +269,5 @@
     if (all[i + 1]) all[i + 1].focus(); else e.target.blur();
   });
 
-  window.CLEAR_MK = { view: view, adminPanel: adminPanel, studentCard: studentCard, click: click, change: change, submit: submit, load: function () { load(); }, reset: function () { MK.loaded = false; MK.loading = false; MK.sheets = []; MK.keys = []; MK.marks = {}; } };
+  window.CLEAR_MK = { view: view, adminPanel: adminPanel, studentCard: studentCard, click: click, change: change, input: input, after: after, submit: submit, load: function () { load(); }, reset: function () { MK.loaded = false; MK.loading = false; MK.sheets = []; MK.keys = []; MK.marks = {}; } };
 })();

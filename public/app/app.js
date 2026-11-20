@@ -318,7 +318,6 @@
         if (!location.hash || location.hash === "#") location.hash = me.role === "admin" ? "#/students" : "#/me";
         if (window.CLEAR_TC) { window.CLEAR_TC.reset(); if (me.role === "admin" || me.role === "teacher") window.CLEAR_TC.ensure(); }
         if (window.CLEAR_MK) { window.CLEAR_MK.reset(); window.CLEAR_MK.load(); }
-        if (window.CLEAR_LB) { window.CLEAR_LB.reset(); if (me.role === "admin") window.CLEAR_LB.load(); }
         if (window.CLEAR_SL) { window.CLEAR_SL.reset(); window.CLEAR_SL.load(); if (me.role === "admin") window.CLEAR_SL.runImports(); }
         render();
       }).catch(function (e) { toast(e.message, true); renderAuth(e.message); });
@@ -353,6 +352,7 @@
     try { localStorage.setItem("clear-theme", t); } catch (e) { /* storage blocked */ }
     render();
   }
+  function previewing() { return /^#\/preview\//.test(location.hash || ""); }
   function route() {
     var h = (location.hash || "").replace(/^#\/?/, "").split("/");
     return { name: h[0] || "", a: h[1] || "", b: h[2] || "" };
@@ -360,7 +360,7 @@
   function shell(inner, current) {
     var admin = me.role === "admin";
     var nav = admin
-      ? [["today", "Today"], ["students", "Students"], ["teachers", "Teachers" + (window.CLEAR_TC && window.CLEAR_TC.badge() ? " (" + window.CLEAR_TC.badge() + ")" : "")], ["lessons", "Lessons"], ["academic", "Clear Academic"], ["library", "Library"], ["placement", "Placement"], ["payments", "Payments"], ["account", "Account"]]
+      ? [["today", "Today"], ["students", "Students"], ["teachers", "Teachers" + (window.CLEAR_TC && window.CLEAR_TC.badge() ? " (" + window.CLEAR_TC.badge() + ")" : "")], ["lessons", "Lessons"], ["academic", "Clear Academic"], ["placement", "Placement"], ["payments", "Payments"], ["account", "Account"]]
       : me.role === "teacher" ? [["me", "My teaching"]] : [["me", "My learning"]];
     return '<header class="top"><div class="who">' + logo() + '<span class="label">' + (admin ? "Admin" : me.role === "teacher" ? "Teacher" : "Student") + "</span></div>" +
       '<div class="right"><span class="hint">' + esc(me.email) + '</span><button type="button" class="iconbtn" data-act="theme" aria-label="Switch to ' + (theme() === "dark" ? "light" : "dark") + ' mode">' + (theme() === "dark" ? "&#9728;" : "&#9790;") + '</button><button type="button" class="btn sec sm" data-act="signout">Sign out</button></div></header>' +
@@ -378,7 +378,7 @@
     else if (r.name === "lessons") html = shell(viewLessons(), "lessons");
     else if (r.name === "teachers" && window.CLEAR_TC) html = shell(window.CLEAR_TC.view(r), "teachers");
     else if (r.name === "academic") html = shell(viewAcademic(r.a || "plan", r.b), "academic");
-    else if (r.name === "library" && window.CLEAR_LB) html = shell(window.CLEAR_LB.view(), "library");
+    else if (r.name === "preview" && r.a && byId(S.students, r.a)) html = shell(previewBar(byId(S.students, r.a)) + viewMe(byId(S.students, r.a)), "students");
     else if (r.name === "mock" && window.CLEAR_MK) html = shell(window.CLEAR_MK.view(r.a), "students");
     else if (r.name === "placement" && window.CLEAR_PL) html = shell(window.CLEAR_PL.view(r), "placement");
     else if (r.name === "payments") html = shell(viewPayments(), "payments");
@@ -387,6 +387,10 @@
     else if (r.name === "report" && r.a) html = shell(viewReport(r.a, r.b === "edit"), "students");
     else html = shell(viewStudents(r.name === "students" ? r.a : ""), "students");
     root.innerHTML = html;
+    if (window.CLEAR_MK && window.CLEAR_MK.after) window.CLEAR_MK.after(r);
+  }
+  function previewBar(s) {
+    return '<div class="pvbar" role="status"><span><b>Preview: what ' + esc(s.full_name.split(" ")[0]) + ' sees.</b> This is her screen exactly, read-only. Typing in the mock sheet works on a practice copy and is never saved to her sheet.</span><a class="btn sm" href="#/students/' + s.id + '">Exit preview</a></div>';
   }
 
   /* ------------------------------------------------------------ admin: today */
@@ -571,7 +575,7 @@
     else if (tab === "notes") body = notesSection(s);
     else if (tab === "details") body = detailsSection(s) + dangerSection(s);
     else body = overviewTab(s, d);
-    return '<div class="panel"><div class="acts noprint"><button type="button" class="btn sec sm back" data-act="back">&larr; All students</button></div>' +
+    return '<div class="panel"><div class="acts noprint"><button type="button" class="btn sec sm back" data-act="back">&larr; All students</button><a class="btn sec sm" href="#/preview/' + s.id + '" style="margin-left:auto">See what ' + esc(s.full_name.split(" ")[0]) + ' sees</a></div>' +
       profileHeader(s, d) + profileFacts(s, d) + profileTabs(d, tab) + '<div class="ptab-body">' + body + "</div></div>";
   }
   function homeworkSection(s, d) {
@@ -1400,8 +1404,8 @@
     var tz = viewTz(); if (tz === EG) return "";
     return '<span class="hint">In your time, ' + esc(tzLabel(tz)) + ": <b>" + esc(fmtDT(iso, tz)) + "</b></span>";
   }
-  function viewMe() {
-    var s = S.students[0];
+  function viewMe(sArg) {
+    var s = sArg || S.students[0];
     if (!s) {
       return '<div class="empty" style="margin-top:24px"><b>We could not find your record yet</b>You signed in as ' + esc(me.email) + '. Please use the same email address you gave the academy, or <a href="' + WHATSAPP + '" target="_blank" rel="noopener">message us on WhatsApp</a>.</div>';
     }
@@ -1422,14 +1426,14 @@
           (l.meeting_url && l.status === "scheduled" ? '<div class="acts"><a class="btn sm" href="' + esc(l.meeting_url) + '" target="_blank" rel="noopener">Join lesson</a></div>' : "") + "</div>";
       }).join("") : '<p class="hint">Your lessons will appear here once they are scheduled.</p>') + "</div>" +
       '<p class="hint">To move a lesson, message the academy at least 24 hours before it starts. <a href="' + WHATSAPP + '" target="_blank" rel="noopener">WhatsApp the academy</a>.</p></div>' +
-      (window.CLEAR_SL ? window.CLEAR_SL.studentCards() : "") + (window.CLEAR_MK ? window.CLEAR_MK.studentCard() : "") + '<div class="sec"><h3>Your materials</h3><div class="cards">' + (S.materials.filter(function (m) { return m.student_id === s.id; }).map(function (m) { return materialRow(m, false); }).join("") || '<p class="hint">Slides and handouts from your lessons will appear here.</p>') + "</div></div>" +
+      (window.CLEAR_SL ? window.CLEAR_SL.studentCards(sArg && sArg.id) : "") + (window.CLEAR_MK ? window.CLEAR_MK.studentCard(sArg && sArg.id) : "") + '<div class="sec"><h3>Your materials</h3><div class="cards">' + (S.materials.filter(function (m) { return m.student_id === s.id; }).map(function (m) { return materialRow(m, false); }).join("") || '<p class="hint">Slides and handouts from your lessons will appear here.</p>') + "</div></div>" +
       (pkgs.length ? '<div class="sec"><h3>Your package</h3><div class="cards">' + pkgs.map(function (p) {
         return '<div class="card"><div class="l1"><span class="t">' + esc(pkgLabel(p)) + '</span><span class="pill ' + (pkgIsPaid(p) ? "ok" : "warn") + '">' + (pkgIsPaid(p) ? "Paid" : "Payment due") + '</span></div><span class="hint">' + pkgUsed(p) + " of " + p.lessons_total + " lessons used" + (p.expires_on ? " · valid until " + esc(p.expires_on) : "") + "</span></div>";
       }).join("") + "</div></div>" : "") +
       (pays.length ? '<div class="sec"><h3>Your receipts</h3><div class="cards">' + pays.map(function (x) {
         return '<div class="card"><div class="l1"><span><b>' + money(x.amount, x.currency) + "</b> · " + esc(x.paid_on) + '</span><span class="pills"><span class="pill ok">' + esc(x.receipt_no) + '</span><button type="button" class="btn sec sm" data-act="openreceipt" data-id="' + x.id + '">Open receipt</button></span></div></div>';
       }).join("") + "</div></div>" : "") + "</div>" +
-      '<div class="panel" style="max-width:520px"><div class="sec"><h3>Sign-in password</h3><p class="hint">Optional. Set a password so you can sign in with your email and password next time. You can change it here whenever you like.</p><form data-form="setpw"><div class="f"><label for="np">New password</label><input id="np" name="password" type="password" minlength="8" autocomplete="new-password" required><span class="hint">At least 8 characters.</span></div><div class="acts" style="margin-top:10px"><button class="btn" type="submit">Save password</button></div></form></div></div>' +
+      (sArg ? "" : '<div class="panel" style="max-width:520px"><div class="sec"><h3>Sign-in password</h3><p class="hint">Optional. Set a password so you can sign in with your email and password next time. You can change it here whenever you like.</p><form data-form="setpw"><div class="f"><label for="np">New password</label><input id="np" name="password" type="password" minlength="8" autocomplete="new-password" required><span class="hint">At least 8 characters.</span></div><div class="acts" style="margin-top:10px"><button class="btn" type="submit">Save password</button></div></form></div></div>') +
       (reps.length ? '<div><h3 style="margin-bottom:12px">Your reports</h3><div style="display:grid;gap:16px">' + reps.map(function (r) { return reportHTML(r, s); }).join("") + '</div><div class="acts noprint" style="margin-top:12px"><button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></div>' : "") + "</div>";
   }
 
@@ -1541,7 +1545,7 @@
   function curFileRow(f) {
     return '<div class="card" id="cf' + f.id + '"><div class="l1"><span class="t">' + esc(f.title) + '</span><span class="pills"><span class="pill">' + esc(CKINDS[f.kind] || f.kind) + '</span><span class="pill ' + (f.for_student ? "ok" : "warn") + '">' + (f.for_student ? "Student can receive" : "Teacher only") + "</span></span></div>" +
       '<span class="hint">' + esc(f.file_name) + " · " + esc(fmtSize(f.size_bytes)) + "</span>" +
-      '<div class="acts">' + (/^audio\//.test(f.mime || "") ? '<button type="button" class="btn sm" data-act="playcur" data-id="' + f.id + '">Play here</button>' : "") + (viewableCopy(f) ? '<button type="button" class="btn sm" data-act="viewcur" data-id="' + f.id + '">View</button>' : "") + (window.CLEAR_SL ? window.CLEAR_SL.pptxBtn(f) : "") + '<button type="button" class="btn sm sec" data-act="opencur" data-id="' + f.id + '">Open or download</button><button type="button" class="btn danger sm" data-act="delcur" data-id="' + f.id + '">Delete</button></div></div>';
+      '<div class="acts">' + (/^audio\//.test(f.mime || "") ? '<button type="button" class="btn sm" data-act="playcur" data-id="' + f.id + '">Play here</button>' : "") + (viewableCopy(f) ? '<button type="button" class="btn sm" data-act="viewcur" data-id="' + f.id + '">View</button>' : "") + (window.CLEAR_SL ? window.CLEAR_SL.pptxBtn(f) : "") + '<button type="button" class="btn sm sec" data-act="opencur" data-id="' + f.id + '">Open or download</button><button type="button" class="btn sm sec" data-act="togcur" data-id="' + f.id + '">' + (f.for_student ? "Make teacher only" : "Let student receive") + '</button><button type="button" class="btn danger sm" data-act="delcur" data-id="' + f.id + '">Delete</button></div></div>';
   }
   function acLesson(l) {
     var lv = levelOf(l), files = curFiles(l.id), sendable = files.filter(function (f) { return f.for_student; });
@@ -2132,6 +2136,11 @@
       return true;
     }
     if (a === "opencur") { var f = byId(S.cur_files, id); if (f) openStored(f.file_path, f.file_name, f.mime); return true; }
+    if (a === "togcur") {
+      var tf = byId(S.cur_files, id); if (!tf) return true; var nv = !tf.for_student;
+      act(sb.from("cur_files").update({ for_student: nv }).eq("id", id), nv ? "Students can now receive this file." : "Now teacher only.").then(refresh).catch(function () { /* act already showed the error */ });
+      return true;
+    }
     if (a === "delcur") { ask("Delete this file from the lesson kit? Copies already sent to students stay with them.", "Delete file").then(function (ok) {
       if (!ok) return; var f2 = byId(S.cur_files, id); if (!f2) return;
       sb.storage.from("materials").remove([f2.file_path]).then(function () { return act(sb.from("cur_files").delete().eq("id", id), "File deleted."); }).then(refresh).catch(function (e) { toast(e.message || "Could not delete.", true); });
@@ -2204,7 +2213,7 @@
   }
   function onInput(e) {
     if (window.CLEAR_PL && window.CLEAR_PL.input(e)) return;
-    if (window.CLEAR_LB && window.CLEAR_LB.input(e)) return;
+    if (window.CLEAR_MK && window.CLEAR_MK.input && window.CLEAR_MK.input(e)) return;
     if (e.target.id === "q") { UI.q = e.target.value; $("#list").innerHTML = studentRows(); return; }
     if (livePrices(e)) return;
     if (e.target.form && e.target.form.getAttribute("data-form") === "addpay") {
@@ -2221,7 +2230,6 @@
     if (liveSchedule(e)) return;
     if (window.CLEAR_PL && window.CLEAR_PL.change(t, ch)) return;
     if (window.CLEAR_MK && window.CLEAR_MK.change(t, ch)) return;
-    if (window.CLEAR_LB && window.CLEAR_LB.change(t, ch)) return;
     if (window.CLEAR_TC && window.CLEAR_TC.change(t, ch)) return;
     if (academicChange(t, ch)) return;
     if (ch === "viewtz") { UI.viewTz = t.value; try { localStorage.setItem("clear-viewtz", t.value); } catch (e) { /* storage blocked */ } return render(); }
@@ -2264,9 +2272,9 @@
   function onClick(e) {
     var b = e.target.closest("[data-act]"); if (!b) return;
     var a = b.getAttribute("data-act"), id = b.getAttribute("data-id"), v = b.getAttribute("data-v");
+    if (previewing() && !/^(go|theme|signout|mk(part|submit)|openreceipt|openfile|print|sl_(show|view))$/.test(a)) { toast("Preview only. Nothing is changed here."); return; }
     if (window.CLEAR_PL && window.CLEAR_PL.click(a, id, v, b)) return;
     if (window.CLEAR_MK && window.CLEAR_MK.click(a, id, v, b)) return;
-    if (window.CLEAR_LB && window.CLEAR_LB.click(a, id, v, b)) return;
     if (window.CLEAR_TC && window.CLEAR_TC.click(a, id, v, b)) return;
     if (window.CLEAR_SL && window.CLEAR_SL.click(a, id, v, b)) return;
     if (academicClick(a, id, v)) return;
@@ -2380,6 +2388,7 @@
   function onSubmit(e) {
     var form = e.target, kind = form.getAttribute("data-form"); if (!kind) return;
     e.preventDefault();
+    if (previewing()) { toast("Preview only. Nothing is sent or saved."); return; }
     var id = form.getAttribute("data-id"), d = formData(form), btn = form.querySelector('button[type="submit"]');
     if (kind === "signin") return doSignIn(d);
     if (kind === "code") return doCode(d);
@@ -2387,7 +2396,6 @@
     var done = function () { if (btn) btn.disabled = false; };
     if (window.CLEAR_PL && window.CLEAR_PL.submit(kind, id, d, done, form)) return;
     if (window.CLEAR_MK && window.CLEAR_MK.submit(kind, id, d, done, form)) return;
-    if (window.CLEAR_LB && window.CLEAR_LB.submit(kind, id, d, done, form)) return;
     if (window.CLEAR_TC && window.CLEAR_TC.submit(kind, id, d, done, form)) return;
     if (academicSubmit(kind, id, d, done)) return;
     if (kind === "addstudent") {
@@ -2483,7 +2491,7 @@
 
   /* ------------------------------------------------------------ start */
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
-  window.__clear = { esc: esc, priceFor: priceFor, role: function () { return me && me.role; }, api: function () {
+  window.__clear = { esc: esc, priceFor: priceFor, role: function () { return me && me.role === "admin" && previewing() ? "student" : me && me.role; }, realRole: function () { return me && me.role; }, previewing: previewing, api: function () {
     return { sb: sb, students: function () { return S.students; }, esc: esc, toast: toast, role: function () { return me && me.role; }, zonedToMs: zonedToMs, addDays: addDays, EG: EG, dayKey: dayKey, activePackage: activePackage, lessonsList: function () { return S.lessons; }, act: act, ask: ask, unwrap: unwrap, fmtDT: fmtDT, render: render, refresh: refresh, nul: nul, logo: logo, cfgUrl: function () { return window.CLEAR_CONFIG.url; } };
   } };
 })();
