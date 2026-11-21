@@ -12,7 +12,7 @@
   var CODES = { SP: "Spelling or number slip", WL: "Over the word limit", DI: "Fell for a distractor or correction", PA: "Missed a paraphrase", LP: "Lost place in audio or text", VO: "Unknown vocabulary", TM: "Ran out of time", GU: "Guess with no evidence" };
   var LBAND = [[39, 9], [37, 8.5], [35, 8], [32, 7.5], [30, 7], [26, 6.5], [23, 6], [18, 5.5], [16, 5], [13, 4.5], [11, 4]];
   var RBAND = [[40, 9], [39, 8.5], [37, 8], [36, 7.5], [34, 7], [32, 6.5], [30, 6], [27, 5.5], [23, 5], [19, 4.5], [15, 4], [12, 3.5], [9, 3]];
-  var MK = { loaded: false, loading: false, keys: [], sheets: [], marks: {}, part: "L", saving: {}, pv: {} };
+  var MK = { loaded: false, loading: false, keys: [], sheets: [], marks: {}, part: "L", saving: {}, pv: {}, res: {} };
   var LIVE = { id: null, timer: null, ch: null, last: null }, deb = {};
 
   function A() { return window.__clear.api(); }
@@ -57,7 +57,8 @@
     Object.keys(codes).forEach(function (q) { if (codes[q] && result(sht, q) === false) tally[codes[q]] = (tally[codes[q]] || 0) + 1; });
     var top = Object.keys(tally).sort(function (a, b) { return tally[b] - tally[a]; }).slice(0, 3).map(function (c) { return c + " ×" + tally[c]; }).join(", ");
     var rAll = r1.raw + r3.raw, r3done = !!(sht.submitted && sht.submitted.R3) || Object.keys(sht.answers || {}).some(function (k) { var n = +k.slice(1); return k[0] === "R" && n >= 28 && sht.answers[k]; });
-    return { l: l, r1: r1, r3: r3, rAll: rAll, r3done: r3done, lBand: l.marked ? band(LBAND, l.raw) : null, rBand: r3done ? band(RBAND, rAll) : null, top: top };
+    var lFull = l.marked === 40, rFull = r1.marked + r3.marked === 40;
+    return { l: l, r1: r1, r3: r3, rAll: rAll, r3done: r3done, lFull: lFull, rFull: rFull, lBand: lFull ? band(LBAND, l.raw) : null, rBand: r3done && rFull ? band(RBAND, rAll) : null, top: top };
   }
   function fmtBand(b) { return b == null ? "below the table" : b; }
 
@@ -75,16 +76,47 @@
     }
     return MK.pv[sid];
   }
+  /* the student's own score and band: marked on the server, the key never reaches her browser */
+  function anySent(sht) { return !!sht.submitted && Object.keys(sht.submitted).length > 0; }
+  function fetchResult(sht) {
+    var cur = MK.res[sht.id]; if (cur && (cur.busy || Date.now() - cur.at < 20000)) return;
+    MK.res[sht.id] = Object.assign({}, cur || {}, { busy: true, at: cur ? cur.at : 0 });
+    Promise.resolve(A().sb.rpc("mock_result", { p_sheet: sht.id })).then(function (r) {
+      var old = cur && cur.data; MK.res[sht.id] = { data: r.error ? old || null : r.data, at: Date.now(), busy: false };
+      if (JSON.stringify(old || null) !== JSON.stringify(MK.res[sht.id].data) && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || "")) A().render();
+    }, function () { MK.res[sht.id] = { data: cur && cur.data, at: Date.now(), busy: false }; });
+  }
+  function resCell(label, big, small) { return '<div><span class="label">' + label + "</span><b>" + big + "</b>" + (small ? "<small>" + small + "</small>" : "") + "</div>"; }
+  function resultHTML(sht) {
+    var d, example = sht.__pv;
+    if (example) d = { L: { raw: 31, of: 40, band: 7 }, R: { raw: 22, of: 27 }, R3: { raw: 9, of: 13 }, reading: { raw: 31, of: 40, band: 6.5 } };
+    else { if (!anySent(sht)) return ""; fetchResult(sht); d = MK.res[sht.id] && MK.res[sht.id].data; if (!d) return '<p class="hint">Getting your result…</p>'; }
+    var cells = "", wait = "Your teacher is still preparing the marking. Check again soon.";
+    if (d.L) cells += d.L.pending ? resCell("Listening", "·", "marking soon") : resCell("Listening", d.L.raw + " / " + d.L.of, "about band " + fmtBand(d.L.band));
+    if (d.reading) cells += d.reading.pending ? resCell("Reading", "·", "marking soon") : resCell("Reading", d.reading.raw + " / " + d.reading.of, "about band " + fmtBand(d.reading.band));
+    else {
+      if (d.R) cells += d.R.pending ? resCell("Reading 1 to 27", "·", "marking soon") : resCell("Reading 1 to 27", d.R.raw + " / " + d.R.of, "band after Reading 28 to 40");
+      if (d.R3) cells += d.R3.pending ? resCell("Reading 28 to 40", "·", "marking soon") : resCell("Reading 28 to 40", d.R3.raw + " / " + d.R3.of, "band after Reading 1 to 27");
+    }
+    var pending = [d.L, d.R, d.R3, d.reading].some(function (x) { return x && x.pending; });
+    return '<div class="mk-result"><h4>' + (example ? "Example of what she will see after sending" : "Your score") + '</h4><div class="sum" style="margin:8px 0">' + cells + "</div>" +
+      '<p class="hint">' + (pending ? wait + " " : "") + "Bands are a guide only and can differ a little from a real test. Your teacher will go through your mistakes with you.</p></div>";
+  }
+  function missing(sht, p) {
+    var a = collect(sht.id, p.id); return qkeys(p).filter(function (q) { return !a[q]; });
+  }
+  function countText(sht, p) { var n = qkeys(p).length - missing(sht, p).length; return n + " of " + qkeys(p).length + " answered"; }
   function studentCard(sid) {
     var list = prev() && sid ? pvSheets(sid) : (isAdmin() ? [] : MK.sheets);
     if (!list.length) return "";
     return '<div class="sec"><h3>Your mock answer sheet</h3><div class="cards">' + list.map(function (sht) {
-      var p = partOf(MK.part) || PARTS[0], locked = !!(sht.submitted && sht.submitted[p.id]);
+      var p = partOf(MK.part) || PARTS[0], locked = !!(sht.submitted && sht.submitted[p.id]), have = qkeys(p).filter(function (q) { return ((sht.answers || {})[q] || "").trim(); }).length;
       return '<div class="card"><div class="l1"><span class="t">' + E(sht.title) + '</span><span class="pills">' + PARTS.map(function (x) { return sht.submitted && sht.submitted[x.id] ? '<span class="pill ok">' + E(x.id === "R3" ? "Reading 28-40" : x.name.split(" ")[0] + (x.id === "R" ? " 1-27" : "")) + " sent</span>" : ""; }).join("") + "</span></div>" +
-        '<p class="hint">Read the questions in your book or on your printout. Type only your answers here. Spelling counts. Your answers save as you type.</p>' +
+        resultHTML(sht) +
+        '<p class="hint">Read the questions in your book or on your printout. Type only your answers here. Spelling counts. Your answers save as you type. Answer every question before you send: if you are not sure, write your best guess.</p>' +
         '<div class="tabs" role="group" aria-label="Part">' + PARTS.map(function (x) { return '<button type="button" data-act="mkpart" data-v="' + x.id + '" aria-pressed="' + (x.id === p.id) + '">' + E(x.name) + "</button>"; }).join("") + "</div>" +
         boxes(sht, p, locked) +
-        '<div class="acts"><span class="hint" id="mkstat_' + sht.id + '">' + (locked ? "Sent to your teacher. This part is locked." : "") + "</span>" + (locked ? "" : '<button type="button" class="btn" data-act="mksubmit" data-id="' + sht.id + '" data-v="' + p.id + '">Send ' + E(p.name) + "</button>") + "</div></div>";
+        '<div class="acts"><span class="hint" id="mkstat_' + sht.id + '">' + (locked ? "Sent to your teacher. This part is locked." : have + " of " + qkeys(p).length + " answered") + "</span>" + (locked ? "" : '<button type="button" class="btn" data-act="mksubmit" data-id="' + sht.id + '" data-v="' + p.id + '">Send ' + E(p.name) + "</button>") + "</div></div>";
     }).join("") + "</div></div>";
   }
   function collect(sheetId, partId) {
@@ -102,8 +134,8 @@
     return Promise.resolve(A().sb.rpc("mock_save", { p_sheet: sheetId, p_answers: collect(sheetId, partId), p_part: partId, p_submit: !!submit })).then(function (r) {
       if (r.error) throw new Error(r.error.message);
       sht.answers = r.data || sht.answers;
-      if (submit) { sht.submitted = Object.assign({}, sht.submitted, (function () { var o = {}; o[partId] = new Date().toISOString(); return o; })()); A().toast("Sent to your teacher."); A().render(); }
-      else stat(sheetId, "Saved");
+      if (submit) { sht.submitted = Object.assign({}, sht.submitted, (function () { var o = {}; o[partId] = new Date().toISOString(); return o; })()); delete MK.res[sheetId]; A().toast("Sent to your teacher."); A().render(); }
+      else stat(sheetId, "Saved · " + countText(sht, partOf(partId)));
     }).catch(function (e) { stat(sheetId, e.message || "Could not save. Check your connection.", true); });
   }
 
@@ -115,7 +147,7 @@
     return '<div class="sec"><h3>Mock tests</h3><div class="cards">' + (mine.length ? mine.map(function (x) {
       var sm = summary(x);
       return '<div class="card"><div class="l1"><span class="t">' + E(x.title) + '</span><span class="pills">' + PARTS.map(function (p) { return '<span class="pill ' + (x.submitted && x.submitted[p.id] ? "ok" : "") + '">' + E(p.id === "R3" ? "R 28-40" : p.id === "R" ? "R 1-27" : "L") + (x.submitted && x.submitted[p.id] ? " sent" : "") + "</span>"; }).join("") + "</span></div>" +
-        '<span class="hint">Listening ' + sm.l.raw + " / 40" + (sm.lBand != null ? " · about band " + fmtBand(sm.lBand) : "") + " · Reading " + sm.r1.raw + " / 27</span>" +
+        '<span class="hint"><b>Listening</b> ' + sm.l.raw + " / 40" + (sm.lFull ? " · about band " + fmtBand(sm.lBand) : " · key incomplete") + " &nbsp;|&nbsp; <b>Reading</b> " + sm.rAll + " / 40" + (sm.r3done ? (sm.rFull ? " · about band " + fmtBand(sm.rBand) : " · key incomplete") : " · band after Reading 28-40") + "</span>" +
         '<div class="acts"><a class="btn sm" href="#/mock/' + x.id + '">Mark</a><button type="button" class="btn danger sm" data-act="mkdel" data-id="' + x.id + '">Delete</button></div></div>';
     }).join("") : '<p class="hint">No answer sheet yet. Open one and she will see it under My learning.</p>') + "</div>" +
       (MK.keys.length ? '<form data-form="mknew" data-id="' + s.id + '" class="addbox" style="margin-top:10px"><div class="fields"><div class="f wide"><label for="mkk">Mock</label><select id="mkk" name="mock_id">' + MK.keys.map(function (k) { return '<option value="' + E(k.id) + '">' + E(k.title) + "</option>"; }).join("") + '</select></div></div><div class="acts"><button class="btn" type="submit">Open answer sheet for ' + E(s.full_name.split(" ")[0]) + "</button></div></form>" : "") + "</div>";
@@ -156,10 +188,10 @@
     var s = summary(sht);
     var cell = function (label, big, small) { return '<div><span class="label">' + label + "</span><b>" + big + "</b>" + (small ? "<small>" + small + "</small>" : "") + "</div>"; };
     return '<div class="sum" style="margin:0">' +
-      cell("Listening", s.l.raw + " / 40", s.lBand != null ? "about band " + fmtBand(s.lBand) : (s.l.marked ? "below the table" : "no key yet")) +
+      cell("Listening", s.l.raw + " / 40", s.lFull ? "about band " + fmtBand(s.lBand) : (s.l.marked ? "key has " + s.l.marked + " of 40" : "no key yet")) +
       cell("Reading 1 to 27", s.r1.raw + " / 27", "") +
       cell("Reading 28 to 40", s.r3.raw + " / 13", "") +
-      cell("Reading total", s.rAll + " / 40", s.r3done ? "about band " + fmtBand(s.rBand) : "convert after Section 3") +
+      cell("Reading total", s.rAll + " / 40", !s.r3done ? "band after Section 3" : s.rFull ? "about band " + fmtBand(s.rBand) : "key has " + (s.r1.marked + s.r3.marked) + " of 40") +
       cell("Most frequent codes", s.top || "none yet", "") + "</div><p class=\"hint\">Indicative bands only. Say \"about band 6 to 6.5\". They vary a little between test versions.</p>";
   }
   function refreshRow(sht, q) {
@@ -189,7 +221,13 @@
   function click(a, id, v) {
     if (a === "mkpart") { MK.part = v; A().render(); return true; }
     if (a === "mksubmit") {
-      var p = partOf(v);
+      var p = partOf(v), ms = missing(sheet(id) || { id: id }, p);
+      if (ms.length) {
+        Array.prototype.forEach.call(document.querySelectorAll('.mk-box[data-sheet="' + id + '"][data-part="' + p.id + '"]'), function (i) { i.closest(".mk-q").classList.toggle("mk-miss", !i.value.trim()); });
+        var first = document.querySelector('.mk-box[data-sheet="' + id + '"][data-part="' + p.id + '"][data-q="' + ms[0] + '"]'); if (first) { first.focus(); try { first.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) { /* ignore */ } }
+        stat(id, "Answer every question before sending. Still blank: " + ms.map(function (q) { return q.slice(1); }).join(", "), true);
+        return true;
+      }
       A().ask("Send " + p.name + " to your teacher? You cannot change these answers afterwards.", "Send").then(function (ok) { if (ok) save(id, v, true); });
       return true;
     }
@@ -229,7 +267,9 @@
   function input(e) {
     var t = e.target; if (!t || !t.classList || !t.classList.contains("mk-box") || t.getAttribute("data-change") !== "mksave") return false;
     var sid = t.getAttribute("data-sheet"), part = t.getAttribute("data-part"), k = sid + part;
-    clearTimeout(deb[k]); stat(sid, "Typing…"); deb[k] = setTimeout(function () { save(sid, part, false); }, 700);
+    if (t.value.trim() && t.closest(".mk-q")) t.closest(".mk-q").classList.remove("mk-miss");
+    var sh = sheet(sid), pp = partOf(part);
+    clearTimeout(deb[k]); stat(sid, "Typing… " + (sh && pp ? countText(sh, pp) : "")); deb[k] = setTimeout(function () { save(sid, part, false); }, 700);
     return true;
   }
   /* live view: the teacher watches the student's sheet fill in */
