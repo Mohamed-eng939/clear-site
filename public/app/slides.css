@@ -103,3 +103,32 @@ body.sl-open{overflow:hidden}
 .slmini .sl-mini-bar{display:flex;align-items:center;gap:8px}
 .slmini .sl-mini-time{font:600 12px/1 var(--display,sans-serif);min-width:38px;text-align:center;font-variant-numeric:tabular-nums}
 .slmini .sl-mini-seek{flex:1;min-width:60px;accent-color:#E63946;cursor:pointer}
+
+/* timer and dice, opened from the annotation tools */
+.sl-wid{position:fixed;right:16px;top:16px;z-index:103;width:min(300px,92vw);background:rgba(22,24,29,.96);color:#fff;border:1px solid #444;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.45);padding:0 12px 12px;font-family:var(--body,sans-serif)}
+.sl-wid[hidden]{display:none}
+.sl-dice{top:300px}
+.sl-wid-h{display:flex;justify-content:space-between;align-items:center;margin:0 -12px 6px;padding:8px 12px;font:700 12px/1 var(--display,sans-serif);letter-spacing:.08em;text-transform:uppercase;color:#bbb;cursor:grab;touch-action:none;user-select:none}
+.sl-wid-x{background:none;border:0;color:#fff;font-size:20px;line-height:1;cursor:pointer;padding:0 4px;border-radius:6px}
+.sl-wid .btn{padding:6px 8px;font-size:13px;min-height:34px}
+.sl-wid .btn.sec{background:rgba(255,255,255,.08);color:#fff;border-color:#777}.sl-wid .btn.on{background:#E63946;border-color:#E63946;color:#fff}
+.sl-tm-time{font:700 64px/1.05 var(--display,sans-serif);text-align:center;font-variant-numeric:tabular-nums;padding:6px 0 10px}
+.sl-timer.low .sl-tm-time{color:#FFD84D}
+.sl-timer.done .sl-tm-time{color:#E63946;animation:slblink .6s steps(2) infinite}
+@keyframes slblink{50%{opacity:.25}}
+.sl-tm-pre,.sl-tm-adj,.sl-tm-act{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:8px}
+.sl-tm-pre[hidden],.sl-tm-adj[hidden]{display:none}
+.sl-tm-act .btn{flex:1 1 0}
+.sl-link{display:block;margin:2px auto 0;background:none;border:0;color:#9ab;font-size:12px;text-decoration:underline;cursor:pointer}
+.sl-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.sl-dice-row{display:flex;gap:12px;justify-content:center;align-items:center;min-height:92px;padding:6px 0}
+.sl-die{display:flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:16px;background:#fff;color:#16181D;box-shadow:inset 0 -4px 0 rgba(0,0,0,.12)}
+.sl-die b{font:700 30px/1 var(--display,sans-serif)}
+.sl-pips{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);width:52px;height:52px}
+.sl-pips i{display:block;width:12px;height:12px;border-radius:50%;margin:auto}.sl-pips i.pip{background:#16181D}
+.sl-dice-row.rolling .sl-die{animation:sltumble .16s linear infinite}
+@keyframes sltumble{0%{transform:rotate(-12deg) translateY(0)}50%{transform:rotate(10deg) translateY(-6px)}100%{transform:rotate(-12deg) translateY(0)}}
+.sl-dice-tot{text-align:center;font:700 18px/1.2 var(--display,sans-serif);min-height:24px;margin-bottom:6px}
+.sl-dice-opt{display:flex;gap:6px;align-items:center;justify-content:center;margin-bottom:8px}.sl-dice-opt span{min-width:44px;font-size:12px;color:#bbb}
+@media (max-width:700px){.sl-dice{top:auto;bottom:16px}.sl-tm-time{font-size:48px}}
+@media (prefers-reduced-motion:reduce){.sl-dice-row.rolling .sl-die,.sl-timer.done .sl-tm-time{animation:none}}

@@ -141,7 +141,19 @@
   function refreshApp(keepProps) {
     var el = $("#slApp"); if (!el || !SL.cur) return;
     var edit = SL.cur.mode === "edit" && isStaff();
+    var oldT = $("#slThumbs"), keep = oldT ? [oldT.scrollTop, oldT.scrollLeft] : null;
     el.innerHTML = appHTML(edit); fitAll(el); wireApp(el); syncAudioUI();
+    thumbsReveal(keep);
+  }
+  /* keep the slide list where it was, and make sure the slide on screen is always visible in it */
+  function thumbsReveal(keep) {
+    var box = $("#slThumbs"), c = SL.cur; if (!box || !c) return;
+    if (keep) { box.scrollTop = keep[0]; box.scrollLeft = keep[1]; }
+    var th = $$(".sl-th", box)[c.idx]; if (!th) return;
+    var r = th.getBoundingClientRect(), b = box.getBoundingClientRect();
+    if (!keep) { box.scrollTop += (r.top - b.top) - (b.height - r.height) / 2; box.scrollLeft += (r.left - b.left) - (b.width - r.width) / 2; return; } /* just opened: centre it */
+    if (r.top < b.top) box.scrollTop -= (b.top - r.top) + 10; else if (r.bottom > b.bottom) box.scrollTop += (r.bottom - b.bottom) + 10;
+    if (r.left < b.left) box.scrollLeft -= (b.left - r.left) + 10; else if (r.right > b.right) box.scrollLeft += (r.right - b.right) + 10;
   }
 
   /* ------------------------------------------------------------ editor: properties panel */
@@ -567,13 +579,13 @@
     var playing = !audio.paused && !!curAud;
     $$("[data-aud]").forEach(function (n) { var on = playing && curAud && n.getAttribute("data-aud") === curAud.id; var ic = $(".sl-aud-ic", n); if (ic) ic.innerHTML = on ? "&#10074;&#10074;" : "&#9654;"; n.classList.toggle("playing", !!on); });
     if (!mini) {
-      mini = document.createElement("div"); mini.id = "slMini"; mini.className = "slmini"; mini.hidden = true; document.body.appendChild(mini);
+      mini = document.createElement("div"); mini.id = "slMini"; mini.className = "slmini"; mini.hidden = true; (document.fullscreenElement || document.body).appendChild(mini);
       mini.innerHTML = '<div class="sl-mini-top"><span class="sl-mini-t"></span><button type="button" class="btn sm sec" data-m="x" aria-label="Stop audio">Stop</button></div>' +
         '<div class="sl-mini-bar"><button type="button" class="btn sm sec" data-m="back" aria-label="Back 10 seconds">&minus;10s</button><button type="button" class="btn sm" data-m="pp" aria-label="Play or pause">Pause</button><button type="button" class="btn sm sec" data-m="fwd" aria-label="Forward 10 seconds">+10s</button>' +
         '<span class="sl-mini-time" data-m="cur">0:00</span><input type="range" class="sl-mini-seek" min="0" max="1000" value="0" step="1" aria-label="Playback position"><span class="sl-mini-time" data-m="dur">0:00</span></div>';
       mini.addEventListener("keydown", function (e) { e.stopPropagation(); });
       mini.addEventListener("click", function (e) {
-        var b = e.target.closest("button"); if (!b) return; var m = b.getAttribute("data-m"), d = audio.duration || 0;
+        var b = e.target.closest("button"); if (!b) return; if (e.detail > 0) b.blur(); var m = b.getAttribute("data-m"), d = audio.duration || 0;
         if (m === "pp") { if (audio.paused) audio.play(); else audio.pause(); }
         else if (m === "back") audio.currentTime = Math.max(0, audio.currentTime - 10);
         else if (m === "fwd") audio.currentTime = d ? Math.min(d, audio.currentTime + 10) : audio.currentTime + 10;
@@ -582,7 +594,7 @@
       var sk = mini.querySelector(".sl-mini-seek");
       sk.addEventListener("input", function () { seeking = true; var d = audio.duration || 0; if (d) { audio.currentTime = sk.value / 1000 * d; } miniTime(); });
       sk.addEventListener("change", function () { seeking = false; });
-      sk.addEventListener("pointerup", function () { seeking = false; });
+      sk.addEventListener("pointerup", function () { seeking = false; sk.blur(); });
     }
     if (curAud && audio.src) {
       mini.hidden = false; mini.querySelector(".sl-mini-t").textContent = curAud.label;
@@ -608,7 +620,7 @@
     el = document.createElement("div"); el.id = "slShow"; el.className = "slshow"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Slide show");
     document.body.appendChild(el);
     el.innerHTML = '<div class="sl-sbox" id="slSbox"></div><div class="sl-ctl" id="slCtl"><button type="button" data-sh="prev" class="btn sm sec" aria-label="Previous">&larr;</button><span id="slCnt"></span><button type="button" data-sh="next" class="btn sm sec" aria-label="Next">&rarr;</button><span id="slAudCtl"></span><button type="button" data-sh="full" class="btn sm sec">Full screen</button><button type="button" data-sh="exit" class="btn sm">Exit</button></div>';
-    inkInit(el);
+    inkInit(el); widInit(el);
     el.addEventListener("click", onShowClick);
     document.addEventListener("keydown", onShowKey, true);
     window.addEventListener("resize", showFit);
@@ -625,6 +637,7 @@
     }).catch(function () { /* stays in the page */ });
   }
   function onFsChange() {
+    if (mini) (document.fullscreenElement || document.body).appendChild(mini); /* the audio bar must stay visible in full screen */
     if (!document.fullscreenElement) {
       try { if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock(); } catch (x) { /* optional */ }
       if (SL.show && SL.show.tool) inkTool(SL.show.tool); /* leaving full screen also puts the pen down */
@@ -661,6 +674,7 @@
     try { if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock(); } catch (x) { /* optional */ }
     if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () {});
     var el = $("#slShow"); if (el) el.remove();
+    widStop();
     if (SL.cur) { SL.cur.idx = sh.idx; }
     SL.show = null;
     if (SL.cur) refreshApp(); else { syncAudioUI(); }
@@ -668,11 +682,14 @@
   function onShowKey(e) {
     if (!SL.show) return;
     var k = e.key;
+    if (k !== "Escape" && e.target && e.target.closest && e.target.closest(".sl-wid, .slmini") && (k === " " || k === "Enter" || e.target.tagName === "INPUT")) return; /* Space and Enter press the focused timer, dice or audio button; the slider keeps its arrow keys */
     if (k === "ArrowRight" || k === "PageDown" || k === " " || k === "Enter") { e.preventDefault(); e.stopPropagation(); showNext(); }
     else if (k === "ArrowLeft" || k === "PageUp" || k === "Backspace") { e.preventDefault(); e.stopPropagation(); showPrev(); }
     else if (k === "Escape") { e.preventDefault(); e.stopPropagation(); if (SL.show.tool) inkTool(SL.show.tool); else exitShow(); }
     else if ((k === "z" || k === "Z") && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); inkUndo(); }
     else if (!e.ctrlKey && !e.metaKey && !e.altKey && { p: "pen", h: "hl", e: "erase", l: "laser" }[k.toLowerCase()]) inkTool({ p: "pen", h: "hl", e: "erase", l: "laser" }[k.toLowerCase()]);
+    else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "t" || k === "T")) widToggle("timer");
+    else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "d" || k === "D")) widToggle("dice");
     else if (k === "Home") { SL.show.idx = 0; SL.show.step = 0; drawShow("none"); }
     else if (k === "End") { SL.show.idx = SL.show.slides.length - 1; SL.show.step = 0; drawShow("none"); }
     else if (k === "f" || k === "F") toggleFs();
@@ -682,7 +699,7 @@
   function inkInit(el) {
     var sh = SL.show; sh.ink = {}; sh.tool = null; sh.col = INKC[0];
     var bar = '<button type="button" class="ink-hide" data-ink="hide" title="Hide the tools (Esc stops drawing)" aria-label="Hide the drawing tools">&#8249;</button><button type="button" class="btn sm sec" data-ink="pen" title="Pen (P)">Pen</button><button type="button" class="btn sm sec" data-ink="hl" title="Highlighter (H)">Marker</button>' +
-      '<button type="button" class="btn sm sec" data-ink="erase" title="Eraser (E)">Eraser</button><button type="button" class="btn sm sec" data-ink="laser" title="Laser pointer (L)">Laser</button><div class="sl-ink-sw">' +
+      '<button type="button" class="btn sm sec" data-ink="erase" title="Eraser (E)">Eraser</button><button type="button" class="btn sm sec" data-ink="laser" title="Laser pointer (L)">Laser</button><button type="button" class="btn sm sec" data-ink="timer" title="Timer (T)">Timer</button><button type="button" class="btn sm sec" data-ink="dice" title="Dice (D)">Dice</button><div class="sl-ink-sw">' +
       INKC.map(function (c, i) { return '<button type="button" class="sw' + (i === 0 ? " on" : "") + '" style="background:' + c + '" data-ink-col="' + c + '" aria-label="Ink colour ' + (i + 1) + '"></button>'; }).join("") +
       '</div><button type="button" class="btn sm sec" data-ink="undo" title="Undo (Ctrl+Z)">Undo</button><button type="button" class="btn sm sec" data-ink="clear" title="Clear this slide">Clear</button>';
     el.insertAdjacentHTML("beforeend", '<canvas id="slInk" class="sl-ink"></canvas><div id="slLaser" class="sl-laser" hidden></div><div class="sl-ink-bar" id="slInkBar" role="toolbar" aria-label="Annotation tools">' + bar + '</div><button type="button" class="sl-ink-tab" id="slInkTab" data-ink="showbar" title="Show the drawing tools" aria-label="Show the drawing tools" hidden>&#8250;</button>');
@@ -692,6 +709,126 @@
     cv.addEventListener("pointerleave", function () { var L = $("#slLaser"); if (L) L.hidden = true; });
     cv.addEventListener("click", function (e) { e.stopPropagation(); });
   }
+  /* ------------------------------------------------------------ timer and dice, opened from the annotation tools */
+  var TM = null, DC = null;
+  function tmFmt(s) { s = Math.max(0, Math.floor(s)); var m = Math.floor(s / 60), r = s % 60; return m + ":" + (r < 10 ? "0" : "") + r; }
+  function tmNow() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  function tmRead() {
+    if (TM.mode === "down") return TM.run ? Math.max(0, (TM.at - tmNow()) / 1000) : TM.left;
+    return TM.run ? TM.up + (tmNow() - TM.at) / 1000 : TM.up;
+  }
+  function widBeep() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; TM.ctx = TM.ctx || new AC(); var c = TM.ctx; if (c.resume) c.resume();
+      [0, 0.4, 0.8].forEach(function (t) {
+        var o = c.createOscillator(), g = c.createGain(), s = c.currentTime + t; o.type = "sine"; o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.3, s + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, s + 0.32);
+        o.connect(g); g.connect(c.destination); o.start(s); o.stop(s + 0.35);
+      });
+    } catch (x) { /* sound is optional */ }
+  }
+  function tmDraw() {
+    var box = $("#slTimer"), disp = $("#slTmTime"); if (!TM || !box || !disp) return;
+    var s = tmRead();
+    if (TM.mode === "down" && TM.run && s <= 0) {
+      TM.run = false; TM.left = 0; TM.done = true; clearInterval(TM.iv); TM.iv = null; s = 0; box.hidden = false; widBeep();
+    }
+    disp.textContent = tmFmt(TM.mode === "down" ? Math.ceil(s) : s);
+    box.classList.toggle("low", TM.mode === "down" && TM.run && s <= 10 && s > 0);
+    box.classList.toggle("done", !!TM.done);
+    box.classList.toggle("up", TM.mode === "up");
+    var go = $('[data-wid="tgo"]', box); if (go) go.textContent = TM.run ? "Pause" : (TM.mode === "down" && TM.done ? "Restart" : "Start");
+    var mode = $('[data-wid="tmode"]', box); if (mode) mode.textContent = TM.mode === "down" ? "Switch to stopwatch" : "Switch to countdown";
+    var tb = $('#slInkBar [data-ink="timer"]'); if (tb) { tb.textContent = TM.run && box.hidden ? tmFmt(TM.mode === "down" ? Math.ceil(s) : s) : "Timer"; tb.classList.toggle("on", !box.hidden); }
+    var live = $("#slTmLive"); if (live) live.textContent = TM.done ? "Time is up" : "";
+  }
+  function tmReset() { TM.run = false; clearInterval(TM.iv); TM.iv = null; TM.left = TM.set; TM.up = 0; TM.done = false; }
+  function tmGo() {
+    if (TM.run) { TM.left = tmRead(); TM.up = TM.mode === "up" ? tmRead() : TM.up; TM.run = false; clearInterval(TM.iv); TM.iv = null; }
+    else {
+      if (TM.mode === "down" && TM.left <= 0) TM.left = TM.set;
+      TM.done = false; TM.run = true; TM.at = TM.mode === "down" ? tmNow() + TM.left * 1000 : tmNow();
+      try { var AC = window.AudioContext || window.webkitAudioContext; if (AC) { TM.ctx = TM.ctx || new AC(); if (TM.ctx.resume) TM.ctx.resume(); } } catch (x) { /* optional */ }
+      TM.iv = setInterval(tmDraw, 200);
+    }
+    tmDraw();
+  }
+  function tmAdjust(d) {
+    if (TM.mode !== "down") return;
+    if (TM.run) TM.at = Math.max(tmNow(), TM.at + d * 1000); else TM.left = Math.max(0, TM.left + d);
+    TM.done = false; tmDraw();
+  }
+  function pips(n) {
+    var map = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] }[n] || [], h = "";
+    for (var i = 0; i < 9; i++) h += '<i class="' + (map.indexOf(i) >= 0 ? "pip" : "") + '"></i>';
+    return '<span class="sl-pips" aria-hidden="true">' + h + "</span>";
+  }
+  function diceDraw(rolling) {
+    var row = $("#slDiceFaces"); if (!row || !DC) return;
+    row.className = "sl-dice-row" + (rolling ? " rolling" : "");
+    row.innerHTML = DC.vals.map(function (v) { return '<span class="sl-die' + (DC.sides === 6 ? " six" : "") + '">' + (DC.sides === 6 ? pips(v) : '<b>' + v + "</b>") + "</span>"; }).join("");
+    var tot = DC.vals.reduce(function (a, b) { return a + b; }, 0), t = $("#slDiceTot");
+    if (t) t.textContent = rolling ? "" : (DC.rolled ? (DC.vals.length > 1 ? "Total " + tot : "") : "Press Roll");
+    var live = $("#slDiceLive"); if (live) live.textContent = rolling || !DC.rolled ? "" : "Rolled " + DC.vals.join(" and ") + (DC.vals.length > 1 ? ", total " + tot : "");
+    $$("#slDice [data-wid=dn]").forEach(function (b) { var on = +b.getAttribute("data-v") === DC.n; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
+    $$("#slDice [data-wid=ds]").forEach(function (b) { var on = +b.getAttribute("data-v") === DC.sides; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
+  }
+  function rnd(n) { var a = new Uint32Array(1); (window.crypto || window.msCrypto).getRandomValues(a); return a[0] % n + 1; }
+  function diceRoll() {
+    if (!DC || DC.busy) return; DC.busy = true; var n = 0, ms = 0;
+    var iv = setInterval(function () {
+      ms += 80; DC.vals = []; for (var i = 0; i < DC.n; i++) DC.vals.push(rnd(DC.sides)); diceDraw(true);
+      if (ms >= 800) { clearInterval(iv); DC.busy = false; DC.rolled = true; diceDraw(false); }
+    }, 80);
+  }
+  function dicePrep() { DC.vals = []; for (var i = 0; i < DC.n; i++) DC.vals.push(DC.sides === 6 ? (i % 6) + 1 : 1); DC.rolled = false; DC.busy = false; }
+  function widInit(el) {
+    TM = { mode: "down", set: 300, left: 300, up: 0, run: false, at: 0, iv: null, done: false, ctx: null };
+    DC = { n: 2, sides: 6, vals: [], rolled: false, busy: false }; dicePrep();
+    var pre = [30, 60, 120, 180, 300, 600].map(function (s) { return '<button type="button" class="btn sm sec" data-wid="tpre" data-v="' + s + '">' + tmFmt(s) + "</button>"; }).join("");
+    el.insertAdjacentHTML("beforeend",
+      '<div class="sl-wid sl-timer" id="slTimer" role="group" aria-label="Timer" hidden><div class="sl-wid-h" data-drag>Timer<button type="button" class="sl-wid-x" data-wid="close" data-v="timer" aria-label="Close the timer">&times;</button></div>' +
+      '<div class="sl-tm-time" id="slTmTime">5:00</div><div class="sl-tm-pre" data-only="down">' + pre + '</div>' +
+      '<div class="sl-tm-adj" data-only="down"><button type="button" class="btn sm sec" data-wid="tadj" data-v="-60">&minus;1 min</button><button type="button" class="btn sm sec" data-wid="tadj" data-v="-10">&minus;10 s</button><button type="button" class="btn sm sec" data-wid="tadj" data-v="10">+10 s</button><button type="button" class="btn sm sec" data-wid="tadj" data-v="60">+1 min</button></div>' +
+      '<div class="sl-tm-act"><button type="button" class="btn" data-wid="tgo">Start</button><button type="button" class="btn sec" data-wid="treset">Reset</button></div>' +
+      '<button type="button" class="sl-link" data-wid="tmode">Switch to stopwatch</button><span class="sl-sr" id="slTmLive" aria-live="assertive"></span></div>' +
+      '<div class="sl-wid sl-dice" id="slDice" role="group" aria-label="Dice" hidden><div class="sl-wid-h" data-drag>Dice<button type="button" class="sl-wid-x" data-wid="close" data-v="dice" aria-label="Close the dice">&times;</button></div>' +
+      '<div class="sl-dice-row" id="slDiceFaces"></div><div class="sl-dice-tot" id="slDiceTot"></div>' +
+      '<div class="sl-dice-opt"><span>Dice</span>' + [1, 2, 3].map(function (n) { return '<button type="button" class="btn sm sec" data-wid="dn" data-v="' + n + '">' + n + "</button>"; }).join("") + '</div>' +
+      '<div class="sl-dice-opt"><span>Sides</span>' + [6, 10, 12, 20].map(function (n) { return '<button type="button" class="btn sm sec" data-wid="ds" data-v="' + n + '">' + n + "</button>"; }).join("") + '</div>' +
+      '<div class="sl-tm-act"><button type="button" class="btn" data-wid="roll">Roll</button></div><span class="sl-sr" id="slDiceLive" aria-live="polite"></span></div>');
+    $$("#slTimer [data-only]").forEach(function (n) { n.hidden = false; });
+    tmDraw(); diceDraw(false);
+  }
+  function widToggle(which) {
+    var box = $(which === "timer" ? "#slTimer" : "#slDice"); if (!box) return;
+    box.hidden = !box.hidden; if (!box.hidden) { box.style.zIndex = ++widZ; var go = $("[data-wid=roll], [data-wid=tgo]", box); if (go) go.focus(); }
+    if (which === "timer") tmDraw(); else { var b = $('#slInkBar [data-ink="dice"]'); if (b) b.classList.toggle("on", !box.hidden); }
+  }
+  var widZ = 103;
+  function widClick(e) {
+    var b = e.target.closest("[data-wid]"); if (!b) return; var a = b.getAttribute("data-wid"), v = b.getAttribute("data-v");
+    if (e.detail > 0 && b.blur) b.blur(); /* after a mouse click the arrow keys go back to the slides */
+    if (a === "close") widToggle(v);
+    else if (a === "tgo") tmGo();
+    else if (a === "treset") { tmReset(); tmDraw(); }
+    else if (a === "tpre") { TM.mode = "down"; TM.set = +v; tmReset(); tmDraw(); }
+    else if (a === "tadj") tmAdjust(+v);
+    else if (a === "tmode") { TM.mode = TM.mode === "down" ? "up" : "down"; tmReset(); $$("#slTimer [data-only]").forEach(function (n) { n.hidden = TM.mode === "up"; }); tmDraw(); }
+    else if (a === "roll") diceRoll();
+    else if (a === "dn") { DC.n = +v; dicePrep(); diceDraw(false); }
+    else if (a === "ds") { DC.sides = +v; dicePrep(); diceDraw(false); }
+  }
+  function widStop() { if (TM) { clearInterval(TM.iv); try { if (TM.ctx && TM.ctx.close) TM.ctx.close(); } catch (x) { /* optional */ } } TM = null; DC = null; }
+  document.addEventListener("pointerdown", function (e) { /* drag a widget by its title bar */
+    var h = e.target.closest && e.target.closest(".sl-wid-h"); if (!h || e.target.closest("button")) return;
+    var w = h.parentNode, r = w.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top; w.style.zIndex = ++widZ;
+    w.style.left = r.left + "px"; w.style.top = r.top + "px"; w.style.right = "auto"; e.preventDefault();
+    function mv(ev) { w.style.left = Math.max(0, Math.min(window.innerWidth - 60, ev.clientX - dx)) + "px"; w.style.top = Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - dy)) + "px"; }
+    function up() { document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up); }
+    document.addEventListener("pointermove", mv); document.addEventListener("pointerup", up);
+  });
+
   var inkHidden = false;
   try { inkHidden = localStorage.getItem("clear_ink_hidden") === "1"; } catch (x) { /* optional */ }
   function inkBarApply() {
@@ -756,8 +893,9 @@
   function toggleFs() { var el = $("#slShow"); if (!el) return; if (document.fullscreenElement) document.exitFullscreen(); else enterFs(el); }
   function onShowClick(e) {
     if (e.target.closest("[data-aud]")) return;
+    if (e.target.closest(".sl-wid")) { widClick(e); return; }
     var ik = e.target.closest("[data-ink]"), ic = e.target.closest("[data-ink-col]");
-    if (ik) { var ia = ik.getAttribute("data-ink"); if (ia === "hide" || ia === "showbar") { inkHidden = ia === "hide"; inkBarApply(); return; } if (ia === "undo") inkUndo(); else if (ia === "clear") inkClear(); else inkTool(ia); return; }
+    if (ik) { var ia = ik.getAttribute("data-ink"); if (ia === "hide" || ia === "showbar") { inkHidden = ia === "hide"; inkBarApply(); return; } if (ia === "timer" || ia === "dice") { widToggle(ia); return; } if (ia === "undo") inkUndo(); else if (ia === "clear") inkClear(); else inkTool(ia); return; }
     if (ic) { inkColor(ic.getAttribute("data-ink-col")); return; }
     if (e.target.closest(".sl-ink-bar") || e.target.closest(".sl-ink-tab")) return;
     var b = e.target.closest("[data-sh]");
