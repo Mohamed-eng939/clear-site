@@ -369,6 +369,7 @@
       }).join("") + "</nav>" + inner;
   }
   function render() {
+    UI.joinStu = null;
     if (!me) return renderAuth();
     var r = route();
     if (me.role === "teacher" && window.CLEAR_TC) { root.innerHTML = shell(window.CLEAR_TC.portal(), "me"); return; }
@@ -1404,6 +1405,33 @@
     var tz = viewTz(); if (tz === EG) return "";
     return '<span class="hint">In your time, ' + esc(tzLabel(tz)) + ": <b>" + esc(fmtDT(iso, tz)) + "</b></span>";
   }
+  /* the lesson that is about to start (15 minutes before) or on now: a big Join button on the student's home */
+  function joinInfo(s) {
+    var now = Date.now(), best = null;
+    S.lessons.forEach(function (l) {
+      if (l.student_id !== s.id || l.status !== "scheduled") return;
+      var st = new Date(l.starts_at).getTime(), en = st + (l.duration_min || 60) * 60000;
+      if (now >= st - 15 * 60000 && now < en && (!best || st < best.st)) best = { l: l, st: st, en: en };
+    });
+    if (!best) return null;
+    var mins = Math.ceil((best.st - now) / 60000), on = mins <= 0, l = best.l;
+    return { l: l, on: on, mins: mins, url: safeUrl(l.meeting_url) || safeUrl(S.settings && S.settings.default_meeting_url), key: l.id + ":" + (on ? "on" : mins) };
+  }
+  function joinBanner(s) {
+    var j = joinInfo(s); UI.joinStu = s.id; UI.joinKey = j ? j.key : "";
+    if (!j) return "";
+    var head = j.on ? "Your lesson is on now" : "Your lesson starts in " + j.mins + (j.mins === 1 ? " minute" : " minutes");
+    var sub = fmtDT(j.l.starts_at) + " Egypt time · " + j.l.duration_min + " min" + (j.l.topic ? " · " + j.l.topic : "");
+    return '<div class="joinbox" role="status"><div><b>' + esc(head) + "</b><span>" + esc(sub) + "</span>" + (j.url ? "" : "<span>Your teacher will add the lesson link here very soon. You can also <a href=\"" + WHATSAPP + "\" target=\"_blank\" rel=\"noopener\">message the academy on WhatsApp</a>.</span>") + "</div>" +
+      (j.url ? '<a class="btn" href="' + esc(j.url) + '" target="_blank" rel="noopener">Join now</a>' : "") + "</div>";
+  }
+  setInterval(function () { /* bring the banner up (and refresh its countdown) without a reload */
+    if (document.hidden || !UI.joinStu) return;
+    var st = byId(S.students, UI.joinStu); if (!st) return;
+    var j = joinInfo(st), k = j ? j.key : ""; if (k === UI.joinKey) return;
+    var tag = ((document.activeElement || {}).tagName || ""); if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
+    render();
+  }, 30000);
   function viewMe(sArg) {
     var s = sArg || S.students[0];
     if (!s) {
@@ -1417,7 +1445,7 @@
     var pays = S.payments.filter(function (p) { return p.student_id === s.id; });
     var next = upcoming[0];
     var dueBox = s.payment_due ? '<div class="paydue" role="alert"><b>Payment due</b><span>Your new level' + (s.payment_due_note ? " (" + esc(s.payment_due_note) + ")" : "") + ' has not been paid yet. Please pay by InstaPay and send your receipt to your teacher on WhatsApp so your lessons stay active.</span></div>' : "";
-    return '<div style="margin-top:20px;display:grid;gap:22px">' + dueBox +
+    return '<div style="margin-top:20px;display:grid;gap:22px">' + joinBanner(s) + dueBox +
       '<div class="sum" style="margin:0"><div><span class="label">Hello</span><b>' + esc(s.full_name.split(" ")[0]) + '</b></div><div><span class="label">Your level</span><b>' + esc(s.level_code || s.cefr || "To be tested") + '</b></div><div><span class="label">Next lesson</span><b style="font-size:17px">' + (next ? esc(fmtDT(next.starts_at)) + "</b><small>Egypt time</small>" + (viewTz() !== EG ? "<small>" + converted(next.starts_at) + "</small>" : "") : "Not scheduled yet</b>") + "</div></div>" +
       studentHomework(s) +
       '<div class="panel"><div class="sec"><h3>Your lessons</h3><div class="f" style="max-width:360px"><label for="vtz">Show lessons in my time zone</label><select id="vtz" data-change="viewtz">' + tzOptions(viewTz()) + '</select></div><p class="hint">Lessons are set in Egypt time.</p><div class="cards">' + (upcoming.concat(past).length ? upcoming.concat(past).map(function (l) {

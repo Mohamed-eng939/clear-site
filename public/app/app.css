@@ -285,3 +285,8 @@ pre.sql{margin:0;background:var(--surface);border:1px solid var(--line);border-r
 .mk-miss{border-color:var(--warn);background:rgba(230,57,70,.08)}
 .mk-result{margin:6px 0 12px}
 .mk-result h4{margin:0}
+.joinbox{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;background:var(--night);color:var(--on-night);border:1.5px solid var(--line-strong);border-radius:var(--rl);padding:16px 20px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.joinbox b{display:block;font:700 18px/1.25 var(--display)}
+.joinbox span{display:block;margin-top:3px;font-size:14px;opacity:.9}
+.joinbox a:not(.btn){color:inherit;text-decoration:underline}
+.joinbox .btn{background:var(--brand);border-color:var(--brand);color:#fff;font-size:16px;padding:12px 22px}
