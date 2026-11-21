@@ -30,7 +30,7 @@
   };
   var USED = ["completed", "late_cancel", "no_show"];
   var METHODS = ["InstaPay", "Bank transfer", "Payment link", "Cash", "Other"];
-  var CEFR = ["A1", "A2", "B1", "B2", "C1", "C2"];
+  var CEFR = ["A1", "A2", "B1", "B1+", "B2", "C1", "C2"], SCALE = ["A1", "A2", "B1", "B2", "C1", "C2"]; /* B1+ is chosen like any level; the report scale keeps six bars and lights B1 for it */
   var SKILLS = ["Speaking", "Listening", "Reading", "Writing"];
   var RECS = ["Vocabulary", "Grammar", "Pronunciation and fluency"];
   var ISSUER = "Mohamed Tarek, trading as CLEAR English Academy";
@@ -1322,8 +1322,8 @@
 
   /* ------------------------------------------------------------ reports: view and editor */
   function reportHTML(r, s) {
-    var lvlIdx = CEFR.indexOf(r.cefr);
-    var scale = '<div class="scale"><div class="bars">' + CEFR.map(function (c, i) { return "<i" + (i === lvlIdx ? ' class="on"' : "") + "></i>"; }).join("") + '</div><div class="names">' + CEFR.map(function (c) { return "<span>" + c + "</span>"; }).join("") + "</div></div>";
+    var lvlIdx = SCALE.indexOf(String(r.cefr || "").replace("+", ""));
+    var scale = '<div class="scale"><div class="bars">' + SCALE.map(function (c, i) { return "<i" + (i === lvlIdx ? ' class="on"' : "") + "></i>"; }).join("") + '</div><div class="names">' + SCALE.map(function (c) { return "<span>" + c + "</span>"; }).join("") + "</div></div>";
     var skills = (r.skills || []).filter(function (k) { return k.can_do || k.next_step; }).map(function (k) {
       return '<div class="skill"><h4>' + esc(k.skill) + "</h4>" + (k.can_do ? '<p class="can"><b>&#10003; Can do</b> ' + esc(k.can_do) + "</p>" : "") + (k.next_step ? '<p class="next"><b>Next step:</b> ' + esc(k.next_step) + "</p>" : "") + "</div>";
     }).join("");
