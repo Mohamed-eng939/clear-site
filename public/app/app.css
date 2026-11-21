@@ -290,3 +290,4 @@ pre.sql{margin:0;background:var(--surface);border:1px solid var(--line);border-r
 .joinbox span{display:block;margin-top:3px;font-size:14px;opacity:.9}
 .joinbox a:not(.btn){color:inherit;text-decoration:underline}
 .joinbox .btn{background:var(--brand);border-color:var(--brand);color:#fff;font-size:16px;padding:12px 22px}
+.cards .card>p{white-space:pre-line}
