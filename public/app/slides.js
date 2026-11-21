@@ -580,7 +580,7 @@
     $$("[data-aud]").forEach(function (n) { var on = playing && curAud && n.getAttribute("data-aud") === curAud.id; var ic = $(".sl-aud-ic", n); if (ic) ic.innerHTML = on ? "&#10074;&#10074;" : "&#9654;"; n.classList.toggle("playing", !!on); });
     if (!mini) {
       mini = document.createElement("div"); mini.id = "slMini"; mini.className = "slmini"; mini.hidden = true; (document.fullscreenElement || document.body).appendChild(mini);
-      mini.innerHTML = '<div class="sl-mini-top"><span class="sl-mini-t"></span><button type="button" class="btn sm sec" data-m="x" aria-label="Stop audio">Stop</button></div>' +
+      mini.innerHTML = '<div class="sl-mini-top" title="Drag to move. Double-click to put it back."><span class="sl-mini-grip" aria-hidden="true">&#8942;&#8942;</span><span class="sl-mini-t"></span><button type="button" class="btn sm sec" data-m="x" aria-label="Stop audio">Stop</button></div>' +
         '<div class="sl-mini-bar"><button type="button" class="btn sm sec" data-m="back" aria-label="Back 10 seconds">&minus;10s</button><button type="button" class="btn sm" data-m="pp" aria-label="Play or pause">Pause</button><button type="button" class="btn sm sec" data-m="fwd" aria-label="Forward 10 seconds">+10s</button>' +
         '<span class="sl-mini-time" data-m="cur">0:00</span><input type="range" class="sl-mini-seek" min="0" max="1000" value="0" step="1" aria-label="Playback position"><span class="sl-mini-time" data-m="dur">0:00</span></div>';
       mini.addEventListener("keydown", function (e) { e.stopPropagation(); });
@@ -821,12 +821,23 @@
   }
   function widStop() { if (TM) { clearInterval(TM.iv); try { if (TM.ctx && TM.ctx.close) TM.ctx.close(); } catch (x) { /* optional */ } } TM = null; DC = null; }
   document.addEventListener("pointerdown", function (e) { /* drag a widget by its title bar */
-    var h = e.target.closest && e.target.closest(".sl-wid-h"); if (!h || e.target.closest("button")) return;
-    var w = h.parentNode, r = w.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top; w.style.zIndex = ++widZ;
-    w.style.left = r.left + "px"; w.style.top = r.top + "px"; w.style.right = "auto"; e.preventDefault();
-    function mv(ev) { w.style.left = Math.max(0, Math.min(window.innerWidth - 60, ev.clientX - dx)) + "px"; w.style.top = Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - dy)) + "px"; }
+    var h = e.target.closest && e.target.closest(".sl-wid-h, .sl-mini-top"); if (!h || e.target.closest("button, input")) return;
+    var w = h.parentNode, r = w.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top, mini = w.id === "slMini"; if (!mini) w.style.zIndex = ++widZ;
+    w.style.left = r.left + "px"; w.style.top = r.top + "px"; w.style.right = "auto"; w.style.bottom = "auto"; e.preventDefault();
+    function mv(ev) { /* the audio box stays fully on screen; the timer and dice may be pushed mostly off */
+      var mx = mini ? window.innerWidth - w.offsetWidth : window.innerWidth - 60, my = mini ? window.innerHeight - w.offsetHeight : window.innerHeight - 40;
+      w.style.left = Math.max(0, Math.min(mx, ev.clientX - dx)) + "px"; w.style.top = Math.max(0, Math.min(my, ev.clientY - dy)) + "px"; }
     function up() { document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up); }
     document.addEventListener("pointermove", mv); document.addEventListener("pointerup", up);
+  });
+
+  document.addEventListener("dblclick", function (e) { /* double-click the audio box's title bar: back to the corner */
+    var h = e.target.closest && e.target.closest(".sl-mini-top"); if (!h || e.target.closest("button, input")) return;
+    var w = h.parentNode; w.style.left = w.style.top = w.style.right = w.style.bottom = "";
+  });
+  window.addEventListener("resize", function () { /* keep a moved audio box on screen */
+    var w = document.getElementById("slMini"); if (!w || !w.style.left) return;
+    w.style.left = Math.max(0, Math.min(window.innerWidth - w.offsetWidth, parseFloat(w.style.left) || 0)) + "px"; w.style.top = Math.max(0, Math.min(window.innerHeight - w.offsetHeight, parseFloat(w.style.top) || 0)) + "px";
   });
 
   var inkHidden = false;

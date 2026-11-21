@@ -132,3 +132,6 @@ body.sl-open{overflow:hidden}
 .sl-dice-opt{display:flex;gap:6px;align-items:center;justify-content:center;margin-bottom:8px}.sl-dice-opt span{min-width:44px;font-size:12px;color:#bbb}
 @media (max-width:700px){.sl-dice{top:auto;bottom:16px}.sl-tm-time{font-size:48px}}
 @media (prefers-reduced-motion:reduce){.sl-dice-row.rolling .sl-die,.sl-timer.done .sl-tm-time{animation:none}}
+
+.slmini .sl-mini-top{cursor:grab;touch-action:none;user-select:none}
+.slmini .sl-mini-grip{color:#888;font:700 14px/1 sans-serif;letter-spacing:-2px;margin-right:2px}
