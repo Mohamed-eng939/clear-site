@@ -103,8 +103,10 @@
           var spPr = kid(el, NS_P, "spPr"), x = spPr && kid(spPr, NS_A, "xfrm");
           if (!x && ln === "sp") { var ph = path(el, ["p:nvSpPr", "p:nvPr", "p:ph"]); if (ph) x = findLayoutXfrm(ph, ctx.chain); }
           var box = x && xfrmBox(x, tx); if (!box) return;
-          var it = { id: "i" + sid + (out.length > 400 ? "x" : ""), x: inch(box.x * 1), y: inch(box.y * 1), w: inch(box.w * 1), h: inch(box.h * 1), step: steps[sid] || 0 };
-          if (it.step) it.fx = "fade";
+          var tg = ctx.trig && ctx.trig[sid]; /* revealed when another shape is clicked: no click number */
+          var it = { id: "i" + sid + (out.length > 400 ? "x" : ""), x: inch(box.x * 1), y: inch(box.y * 1), w: inch(box.w * 1), h: inch(box.h * 1), step: tg ? 0 : (steps[sid] || 0) };
+          if (it.step || tg) it.fx = "fade";
+          if (tg) it.trigger = "i" + tg;
           if (ln === "cxnSp") { var lc = colorOf(kid(spPr, NS_A, "ln")); if (!lc) return; it.t = "box"; it.shape = "rect"; it.fill = lc; it.paras = [{ al: "l", runs: [{ t: "" }] }]; if (it.w > it.h) it.h = Math.max(it.h, 0.02); else it.w = Math.max(it.w, 0.02); out.push(it); return; }
           if (ln === "pic") {
             var blip = path(el, ["p:blipFill", "a:blip"]); if (!blip) return;
@@ -187,11 +189,22 @@
                 var lst = kid(c, NS_P, "childTnLst"); if (!lst) return;
                 kids(lst, NS_P, "par").forEach(function (par, n) { all(par, NS_P, "spTgt").forEach(function (t) { steps[Number(t.getAttribute("spid"))] = n + 1; }); });
               });
+              /* interactive sequences: clicking shape X reveals the shapes its effects point at (PowerPoint "Trigger > On click of"). trig[target] = X */
+              var trig = {};
+              all(doc, NS_P, "cTn").forEach(function (c) {
+                if (c.getAttribute("nodeType") !== "interactiveSeq") return;
+                var cond = path(c, ["p:stCondLst", "p:cond"]); if (!cond || cond.getAttribute("evt") !== "onClick") return;
+                var src = path(cond, ["p:tgtEl", "p:spTgt"]), lst = kid(c, NS_P, "childTnLst"); if (!src || !lst) return;
+                var X = Number(src.getAttribute("spid")), gone = {};
+                all(lst, NS_P, "cTn").forEach(function (e) { if (e.getAttribute("presetClass") === "exit") all(e, NS_P, "spTgt").forEach(function (t) { gone[t.getAttribute("spid")] = 1; }); });
+                all(lst, NS_P, "spTgt").forEach(function (t) { var id = Number(t.getAttribute("spid")); if (id !== X && !gone[id]) trig[id] = X; });
+              });
               var tree = path(doc.documentElement, ["p:cSld", "p:spTree"]), out = [], sid = "s" + (si + 1);
-              var ctx = { rels: rels, chain: chain };
+              var ctx = { rels: rels, chain: chain, trig: trig };
               return (tree ? shapeItems(tree, ctx, { ox: 0, oy: 0, cox: 0, coy: 0, sx: sx, sy: sy }, steps, out) : Promise.resolve()).then(function () {
                 // unique item ids
                 var seen = {}; out.forEach(function (it, i) { if (seen[it.id]) it.id = it.id + "_" + i; seen[it.id] = 1; });
+                out.forEach(function (it) { if (it.trigger && !seen[it.trigger]) delete it.trigger; }); /* the trigger shape was not imported: show the item always */
                 slides.push({ id: sid, bg: bg, tr: "fade", items: out });
                 var nrel = Object.keys(rels).map(function (k) { return rels[k]; }).filter(function (x) { return /notesSlide$/.test(x.type); })[0];
                 if (!nrel) return;
