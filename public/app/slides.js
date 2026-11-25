@@ -9,6 +9,12 @@
   var PALETTE = ["#16181D", "#E63946", "#FFFFFF", "#F2F3F5", "#6B7280", "#F2A5AB", "#FFD84D", "#A8242F"];
   var AUD_MIME = { mp3: "audio/mpeg", m4a: "audio/mp4", mp4: "audio/mp4", wav: "audio/wav" };
   var SL = { decks: [], loaded: false, loading: false, cache: {}, cur: null, show: null };
+  /* check and cross stamps: drawn as strokes on a 40 x 40 square (0.4 in on the 13.33 x 7.5 in slide), so they scale with the slide.
+     The same path draws the toolbar icon and the mark on the canvas. A colour override can later replace the "c" of a kind (see stampColor). */
+  var STAMP_SIZE = 40, STAMP_LW = 6.5;
+  var STAMP = { check: { c: "#1B7F5F", d: "M8 21L16 29L32 11", label: "Check mark" }, cross: { c: "#E63946", d: "M9 9L31 31M31 9L9 31", label: "Cross mark" } };
+  function stampIcon(k) { return '<svg viewBox="0 0 ' + STAMP_SIZE + " " + STAMP_SIZE + '" width="18" height="18" aria-hidden="true" focusable="false"><path d="' + STAMP[k].d + '" fill="none" stroke="' + STAMP[k].c + '" stroke-width="' + STAMP_LW + '" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
+  function stampColor(k) { return (SL.show && SL.show.stampCol && SL.show.stampCol[k]) || STAMP[k].c; }
   var audio = new Audio(); audio.preload = "auto";
   var mini = null;
 
@@ -39,7 +45,11 @@
   function itemHTML(it, ctx) {
     var st = { left: it.x * PX + "px", top: it.y * PX + "px", width: it.w * PX + "px", height: it.h * PX + "px" };
     var cls = "sl-it sl-" + it.t, attrs = ' data-id="' + E(it.id) + '"';
-    if (it.step) { cls += " sl-step"; attrs += ' data-step="' + it.step + '" data-fx="' + E(it.fx || "fade") + '"'; if (!ctx.all && it.step > ctx.step) cls += " off"; else cls += " on"; }
+    /* trigger animation: hidden until the item named in it.trigger is clicked (any order, no click number). A trigger that points at nothing is ignored, so an item is never lost. */
+    var hold = !ctx.edit && (!ctx.all || ctx.live), tgOf = it.trigger && it.trigger !== it.id && ctx.ids && ctx.ids[it.trigger] ? it.trigger : null;
+    if (tgOf) { cls += " sl-tg" + (hold ? " off" : " on"); attrs += ' data-trigger="' + E(tgOf) + '" data-fx="' + E(it.fx || "fade") + '"'; }
+    else if (it.step) { cls += " sl-step"; attrs += ' data-step="' + it.step + '" data-fx="' + E(it.fx || "fade") + '"'; if (!ctx.all && it.step > ctx.step) cls += " off"; else cls += " on"; }
+    if (hold && ctx.srcs && ctx.srcs[it.id]) cls += " sl-trigger";
     if (it.t === "img") {
       var a = ctx.assets[it.src];
       return '<div class="' + cls + '" style="' + css(st) + '"' + attrs + ">" + (a && a.data ? '<img alt="" draggable="false" src="data:' + E(a.mime) + ";base64," + a.data + '">' : '<div class="sl-missing">Picture</div>') + "</div>";
@@ -73,7 +83,21 @@
   }
   function stageHTML(slide, ctx) {
     ctx = ctx || {}; ctx.assets = ctx.assets || {}; ctx.step = ctx.step || 0;
+    var its = slide.items || []; ctx.ids = {}; ctx.srcs = {};
+    its.forEach(function (i) { ctx.ids[i.id] = 1; });
+    its.forEach(function (i) { if (i.trigger && i.trigger !== i.id && ctx.ids[i.trigger]) ctx.srcs[i.trigger] = 1; });
     return '<div class="sl-stage" style="background:' + E(slide.bg || "#FFFFFF") + '">' + (slide.items || []).map(function (it) { return itemHTML(it, ctx); }).join("") + "</div>";
+  }
+  /* click a trigger item: show (or hide again) every item that names it. Items re-render when a slide is entered, so they start hidden each time. */
+  function trigToggle(root, srcId) {
+    var els = $$(".sl-tg", root).filter(function (n) { return n.getAttribute("data-trigger") === srcId; });
+    if (!els.length) return;
+    var show = els.some(function (n) { return n.classList.contains("off"); });
+    els.forEach(function (n) { n.classList.toggle("off", !show); n.classList.toggle("on", show); });
+  }
+  function trigClick(e, root) {
+    var t = e.target.closest && e.target.closest(".sl-trigger"); if (!t || !root || !root.contains(t)) return false;
+    trigToggle(root, t.getAttribute("data-id")); return true;
   }
   function maxStep(slide) { return (slide.items || []).reduce(function (m, i) { return Math.max(m, i.step || 0); }, 0); }
   /* scale a .sl-fit box (16:9) so the 1333 x 750 stage fits inside it */
@@ -127,7 +151,7 @@
       return '<div role="button" tabindex="0" class="sl-th' + (i === c.idx ? " cur" : "") + '" data-sl="goto" data-i="' + i + '" aria-label="Slide ' + (i + 1) + '"><span class="sl-n">' + (i + 1) + '</span><span class="sl-fit">' + stageHTML(s, { assets: c.assets, all: true, edit: edit }) + "</span></div>";
     }).join("") + (edit ? '<div class="sl-th-acts"><button type="button" class="btn sm sec" data-sl="addslide">+ Slide</button><button type="button" class="btn sm sec" data-sl="dupslide">Duplicate</button><button type="button" class="btn sm sec" data-sl="up">&uarr;</button><button type="button" class="btn sm sec" data-sl="down">&darr;</button><button type="button" class="btn sm sec" data-sl="delslide">Delete</button></div>' : "") + "</div>";
     var slide = c.slides[c.idx];
-    var main = '<div class="sl-main"><div class="sl-canvas" style="width:100%;max-width:1100px;margin:0 auto"><div class="sl-fit" id="slCanvas" data-edit="' + (edit ? 1 : 0) + '">' + stageHTML(slide, { assets: c.assets, all: true, edit: edit }) + "</div></div>" +
+    var main = '<div class="sl-main"><div class="sl-canvas" style="width:100%;max-width:1100px;margin:0 auto"><div class="sl-fit" id="slCanvas" data-edit="' + (edit ? 1 : 0) + '">' + stageHTML(slide, { assets: c.assets, all: true, edit: edit, live: !edit }) + "</div></div>" +
       '<div class="sl-nav"><button type="button" class="btn sm sec" data-sl="prev">&larr; Previous</button><span>Slide ' + (c.idx + 1) + " of " + c.slides.length + '</span><button type="button" class="btn sm sec" data-sl="next">Next &rarr;</button></div>' +
       (audioBarHTML(slide) || "") + (!edit && isStaff() && c.notes[slide.id] ? '<div class="sl-notes"><b>Teacher notes</b><p>' + E(c.notes[slide.id]) + "</p></div>" : "") + "</div>";
     var props = edit ? '<div class="sl-props" id="slProps">' + propsHTML() + "</div>" : "";
@@ -172,6 +196,16 @@
     return '<div class="sl-sw" data-name="' + name + '">' + (withNone ? '<button type="button" class="sw none' + (!val ? " on" : "") + '" data-sl="color" data-name="' + name + '" data-v="" title="None">&times;</button>' : "") +
       PALETTE.map(function (c) { return '<button type="button" class="sw' + (val && val.toLowerCase() === c.toLowerCase() ? " on" : "") + '" style="background:' + c + '" data-sl="color" data-name="' + name + '" data-v="' + c + '" aria-label="' + c + '"></button>'; }).join("") + "</div>";
   }
+  function trigOptions(slide, it) {
+    var o = '<option value="">No (use the click number)</option>';
+    (slide.items || []).forEach(function (i, n) {
+      if (i.id === it.id || i.trigger === it.id) return; /* not itself, and never a loop */
+      var tx = (i.paras || []).map(function (p) { return p.runs.map(function (r) { return r.t; }).join(""); }).join(" ").replace(/\s+/g, " ").trim();
+      var lb = (n + 1) + ". " + (i.t === "img" ? "Picture" : i.t === "audio" ? "Audio" : tx ? tx.slice(0, 30) + (tx.length > 30 ? "…" : "") : "Shape");
+      o += '<option value="' + E(i.id) + '"' + (it.trigger === i.id ? " selected" : "") + ">" + E(lb) + "</option>";
+    });
+    return o;
+  }
   function propsHTML() {
     var c = SL.cur, slide = c.slides[c.idx], it = selItem();
     var add = '<div class="sl-add"><b>Add</b><button type="button" class="btn sm sec" data-sl="addtext">Text</button><button type="button" class="btn sm sec" data-sl="addbox">Box</button>' +
@@ -214,6 +248,8 @@
     if (it.t === "img") h += '<label class="btn sm sec">Replace picture<input type="file" accept="image/*" data-sl-file="imgfor" hidden></label>';
     h += '<div class="sl-row"><label for="slStep">Appears on click no.</label><input id="slStep" type="number" min="0" max="40" value="' + (it.step || 0) + '" data-sl-in="step"><select data-sl-in="fx" aria-label="Animation"><option value="fade"' + ((it.fx || "fade") === "fade" ? " selected" : "") + '>Fade</option><option value="up"' + (it.fx === "up" ? " selected" : "") + '>Rise</option><option value="zoom"' + (it.fx === "zoom" ? " selected" : "") + '>Pop</option><option value="none"' + (it.fx === "none" ? " selected" : "") + ">Appear</option></select></div>" +
       '<p class="hint">0 = always visible. 1, 2, 3 = shown on the first, second, third click. Same number = shown together.</p>' +
+      '<div class="sl-row"><label for="slTrg">Reveal on click of</label><select id="slTrg" data-sl-in="trigger" aria-label="Reveal when this item is clicked">' + trigOptions(slide, it) + "</select></div>" +
+      '<p class="hint">Or choose an item here: this one stays hidden until that item is clicked in the slide show, in any order. It then ignores the click number.</p>' +
       '<div class="sl-row"><label>Position (inches)</label>' + ["x", "y", "w", "h"].map(function (k) { return '<input type="number" step="0.05" class="num" value="' + it[k] + '" data-sl-in="pos" data-k="' + k + '" aria-label="' + k + '">'; }).join("") + "</div>" +
       '<div class="sl-row"><button type="button" class="btn sm sec" data-sl="dupitem">Duplicate</button><button type="button" class="btn sm sec" data-sl="front">Bring to front</button><button type="button" class="btn sm sec" data-sl="back">Send back</button><button type="button" class="btn sm danger" data-sl="delitem">Delete</button></div></div>';
     return h + slideP;
@@ -242,8 +278,9 @@
     var stage = $(".sl-stage", box); if (!stage) return;
     $$(".sl-anim", stage).forEach(function (b) { b.remove(); });
     (curSlide().items || []).forEach(function (it) {
-      if (!it.step) return;
-      var b = document.createElement("span"); b.className = "sl-anim"; b.textContent = it.step;
+      var trg = it.trigger && it.trigger !== it.id && (curSlide().items || []).some(function (o) { return o.id === it.trigger; });
+      if (!it.step && !trg) return;
+      var b = document.createElement("span"); b.className = "sl-anim" + (trg ? " trg" : ""); b.textContent = trg ? "\u25B6" : it.step; if (trg) b.title = "Appears when another item is clicked";
       b.style.left = it.x * PX + "px"; b.style.top = it.y * PX + "px"; stage.appendChild(b);
     });
   }
@@ -278,6 +315,7 @@
     if (!it) return;
     if (el.getAttribute("data-typing") !== "1") { snap(); el.setAttribute("data-typing", "1"); }
     if (k === "step" || k === "fx") { selItems().forEach(function (o) { if (k === "step") o.step = Math.max(0, parseInt(v, 10) || 0); else o.fx = v; }); dirty(); redrawCanvas(); return; }
+    if (k === "trigger") { if (v) { it.trigger = v; it.step = 0; if (!it.fx) it.fx = "fade"; } else delete it.trigger; dirty(); redrawCanvas(); redrawProps(); return; }
     if (k === "text") setText(it, v);
     else if (k === "size") eachRun(it, function (r) { r.sz = Math.max(6, Number(v) || 18); });
     else if (k === "align") (it.paras || []).forEach(function (p) { p.al = v; });
@@ -295,6 +333,7 @@
   function wireApp(el) {
     var cv = $("#slCanvas", el);
     if (cv && cv.getAttribute("data-edit") === "1") { markSel(); cv.addEventListener("pointerdown", onDown); cv.addEventListener("dblclick", onDbl); }
+    else if (cv) cv.addEventListener("click", function (e) { trigClick(e, cv); });
     wireProps(el);
   }
   /* the properties panel is re-rendered whenever the selection changes, so its fields must be wired again each time */
@@ -487,7 +526,12 @@
 
   /* ------------------------------------------------------------ actions */
   function go(d) { var c = SL.cur, n = c.idx + d; if (n < 0 || n >= c.slides.length) return; c.idx = n; c.sel = null; refreshApp(); }
-  function delItem() { var c = SL.cur, s = curSlide(), ids = selIds(); if (!ids.length) return; snap(); s.items = s.items.filter(function (i) { return ids.indexOf(i.id) < 0; }); c.sel = null; dirty(); redrawCanvas(); redrawProps(); }
+  /* after copying items, a trigger follows its copied trigger item; one pointing at an item that is not on the destination slide is dropped */
+  function remapTrig(fresh, idm, dest) {
+    var have = {}; dest.forEach(function (i) { have[i.id] = 1; });
+    fresh.forEach(function (i) { if (!i.trigger) return; if (idm[i.trigger]) i.trigger = idm[i.trigger]; else if (!have[i.trigger]) delete i.trigger; });
+  }
+  function delItem() { var c = SL.cur, s = curSlide(), ids = selIds(); if (!ids.length) return; snap(); s.items = s.items.filter(function (i) { return ids.indexOf(i.id) < 0; }); s.items.forEach(function (i) { if (i.trigger && ids.indexOf(i.trigger) >= 0) delete i.trigger; }); c.sel = null; dirty(); redrawCanvas(); redrawProps(); }
   /* copy, cut and paste items (also onto another slide) */
   function copyItems(cut) {
     var its = selItems(); if (!its.length) return;
@@ -496,13 +540,13 @@
   }
   function pasteItems() {
     var c = SL.cur; if (!clip || !clip.items.length) return;
-    clip.n++; var off = Math.min(clip.n, 8) * 0.3, ids = [], s = curSlide(), put = [];
+    clip.n++; var off = Math.min(clip.n, 8) * 0.3, ids = [], s = curSlide(), put = [], idm = {};
     clip.items.forEach(function (o) {
       if ((o.t === "img" || o.t === "audio") && o.src && !c.assets[o.src]) return; /* its file belongs to another deck */
-      var d = clone(o); d.id = sid(); d.x = Math.round(Math.max(0, Math.min(13.33 - d.w, d.x + off)) * 20) / 20; d.y = Math.round(Math.max(0, Math.min(7.5 - d.h, d.y + off)) * 20) / 20; put.push(d); ids.push(d.id);
+      var d = clone(o); idm[o.id] = d.id = sid(); d.x = Math.round(Math.max(0, Math.min(13.33 - d.w, d.x + off)) * 20) / 20; d.y = Math.round(Math.max(0, Math.min(7.5 - d.h, d.y + off)) * 20) / 20; put.push(d); ids.push(d.id);
     });
     if (!put.length) return toast("Those items can't be pasted into this deck.");
-    snap(); put.forEach(function (d) { s.items.push(d); }); setSelIds(ids); dirty(); redrawCanvas(); redrawProps();
+    remapTrig(put, idm, s.items); snap(); put.forEach(function (d) { s.items.push(d); }); setSelIds(ids); dirty(); redrawCanvas(); redrawProps();
   }
   function undo() {
     var c = SL.cur; if (!c.undo.length) { toast("Nothing to undo."); return; }
@@ -536,12 +580,12 @@
     if (a === "save") return save();
     if (a === "undo") return undo();
     if (a === "addslide") { snap(); var ns = blankSlide("New slide"); c.slides.splice(c.idx + 1, 0, ns); c.idx++; c.sel = null; dirty(); return refreshApp(); }
-    if (a === "dupslide") { snap(); var cp = clone(curSlide()); cp.id = "s" + Math.random().toString(36).slice(2, 8); cp.items.forEach(function (i) { i.id = sid(); }); c.notes[cp.id] = c.notes[curSlide().id] || ""; c.slides.splice(c.idx + 1, 0, cp); c.idx++; dirty(); return refreshApp(); }
+    if (a === "dupslide") { snap(); var cp = clone(curSlide()); cp.id = "s" + Math.random().toString(36).slice(2, 8); var idm = {}; cp.items.forEach(function (i) { var n = sid(); idm[i.id] = n; i.id = n; }); remapTrig(cp.items, idm, cp.items); c.notes[cp.id] = c.notes[curSlide().id] || ""; c.slides.splice(c.idx + 1, 0, cp); c.idx++; dirty(); return refreshApp(); }
     if (a === "delslide") { if (c.slides.length < 2) return toast("A deck needs at least one slide."); if (!window.confirm("Delete this slide?")) return; snap(); c.slides.splice(c.idx, 1); c.idx = Math.max(0, c.idx - 1); c.sel = null; dirty(); return refreshApp(); }
     if (a === "up" || a === "down") { var j = c.idx + (a === "up" ? -1 : 1); if (j < 0 || j >= c.slides.length) return; snap(); var t = c.slides[c.idx]; c.slides[c.idx] = c.slides[j]; c.slides[j] = t; c.idx = j; dirty(); return refreshApp(); }
     if (a === "addtext" || a === "addbox") { snap(); var it = newItem(a === "addtext" ? "text" : "box"); curSlide().items.push(it); c.sel = it.id; dirty(); redrawCanvas(); return redrawProps(); }
     if (a === "delitem") return delItem();
-    if (a === "dupitem") { var s0 = selItems(); if (!s0.length) return; snap(); var nids = []; s0.forEach(function (o) { var d = clone(o); d.id = sid(); d.x += 0.3; d.y += 0.3; curSlide().items.push(d); nids.push(d.id); }); setSelIds(nids); dirty(); redrawCanvas(); return redrawProps(); }
+    if (a === "dupitem") { var s0 = selItems(); if (!s0.length) return; snap(); var nids = [], dm = {}, fresh = []; s0.forEach(function (o) { var d = clone(o); dm[o.id] = d.id = sid(); d.x += 0.3; d.y += 0.3; curSlide().items.push(d); nids.push(d.id); fresh.push(d); }); remapTrig(fresh, dm, curSlide().items); setSelIds(nids); dirty(); redrawCanvas(); return redrawProps(); }
     if (a === "front" || a === "back") { var s1 = selItems(); if (!s1.length) return; snap(); var arr = curSlide().items.filter(function (i) { return s1.indexOf(i) < 0; }); curSlide().items = a === "front" ? arr.concat(s1) : s1.concat(arr); dirty(); return redrawCanvas(); }
     if (a === "bold") { var s2 = selItem(); if (!s2) return; snap(); var on = !(s2.paras && s2.paras[0] && s2.paras[0].runs[0] && s2.paras[0].runs[0].b); eachRun(s2, function (r) { if (on) r.b = 1; else delete r.b; }); dirty(); redrawCanvas(); return redrawProps(); }
     if (a === "color") return setCol(b.getAttribute("data-name"), b.getAttribute("data-v"));
@@ -615,12 +659,12 @@
   /* ------------------------------------------------------------ slide show */
   function startShow() {
     var c = SL.cur; if (!c) return;
-    SL.show = { slides: c.slides, assets: c.assets, notes: c.notes, idx: c.idx, step: 0, fromEdit: c.mode };
+    SL.show = { slides: c.slides, assets: c.assets, notes: c.notes, idx: c.idx, step: 0, fromEdit: c.mode, ctlF: ctlLoad() };
     var el = $("#slShow"); if (el) el.remove();
     el = document.createElement("div"); el.id = "slShow"; el.className = "slshow"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Slide show");
     document.body.appendChild(el);
-    el.innerHTML = '<div class="sl-sbox" id="slSbox"></div><div class="sl-ctl" id="slCtl"><button type="button" data-sh="prev" class="btn sm sec" aria-label="Previous">&larr;</button><span id="slCnt"></span><button type="button" data-sh="next" class="btn sm sec" aria-label="Next">&rarr;</button><span id="slAudCtl"></span><button type="button" data-sh="full" class="btn sm sec">Full screen</button><button type="button" data-sh="exit" class="btn sm">Exit</button></div>';
-    inkInit(el); widInit(el);
+    el.innerHTML = '<div class="sl-sbox" id="slSbox"></div><div class="sl-ctl" id="slCtl"><span class="sl-ctl-grip" id="slCtlGrip" title="Drag to move the bar up or down" aria-label="Drag to move the control bar" role="img">&#8942;&#8942;</span><button type="button" data-sh="flip" id="slCtlFlip" class="btn sm sec" title="Move bar to top" aria-label="Move bar to top">&#8593;</button><button type="button" data-sh="prev" class="btn sm sec" aria-label="Previous">&larr;</button><span id="slCnt"></span><button type="button" data-sh="next" class="btn sm sec" aria-label="Next">&rarr;</button><span id="slAudCtl"></span><button type="button" data-sh="full" class="btn sm sec">Full screen</button><button type="button" data-sh="exit" class="btn sm">Exit</button></div>';
+    inkInit(el); widInit(el); ctlWire(el);
     el.addEventListener("click", onShowClick);
     document.addEventListener("keydown", onShowKey, true);
     window.addEventListener("resize", showFit);
@@ -646,7 +690,7 @@
   }
   function showFit() {
     var box = $("#slSbox"); if (!box) return; var st = box.firstElementChild; if (!st) return;
-    var s = Math.min(box.clientWidth / (W * PX), box.clientHeight / (H * PX)); st.style.transform = "scale(" + s + ")"; st.style.left = (box.clientWidth - W * PX * s) / 2 + "px"; st.style.top = (box.clientHeight - H * PX * s) / 2 + "px"; inkSize();
+    var s = Math.min(box.clientWidth / (W * PX), box.clientHeight / (H * PX)); st.style.transform = "scale(" + s + ")"; st.style.left = (box.clientWidth - W * PX * s) / 2 + "px"; st.style.top = (box.clientHeight - H * PX * s) / 2 + "px"; inkSize(); ctlApply();
   }
   function drawShow(how) {
     var sh = SL.show, slide = sh.slides[sh.idx], box = $("#slSbox"); if (!box) return;
@@ -671,6 +715,7 @@
   function exitShow() {
     var sh = SL.show; if (!sh) return;
     document.removeEventListener("keydown", onShowKey, true); window.removeEventListener("resize", showFit); document.removeEventListener("fullscreenchange", onFsChange);
+    clearTimeout(ctlTimer);
     try { if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock(); } catch (x) { /* optional */ }
     if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () {});
     var el = $("#slShow"); if (el) el.remove();
@@ -694,12 +739,48 @@
     else if (k === "End") { SL.show.idx = SL.show.slides.length - 1; SL.show.step = 0; drawShow("none"); }
     else if (k === "f" || k === "F") toggleFs();
   }
+  /* ------------------------------------------------------------ the presenter control bar: drag it up or down, or flip it to the top or bottom */
+  var CTL_KEY = "clear_ctl_pos", CTL_M = 12, ctlTimer = null;
+  function ctlLoad() { try { var v = parseFloat(localStorage.getItem(CTL_KEY)); return isFinite(v) ? Math.max(0, Math.min(1, v)) : null; } catch (x) { return null; } }
+  function ctlSave(f) { try { localStorage.setItem(CTL_KEY, String(f)); } catch (x) { /* optional */ } }
+  function ctlRoom(bar) { return Math.max(1, window.innerHeight - bar.offsetHeight); }
+  function ctlTop(bar, y) { bar.style.bottom = "auto"; bar.style.top = Math.max(0, Math.min(ctlRoom(bar), y)) + "px"; }
+  function ctlApply() { /* puts the bar where it was left (a fraction of the free height, so it survives a resize) and refreshes the toggle */
+    var bar = $("#slCtl"), sh = SL.show; if (!bar || !sh) return;
+    if (sh.ctlF != null) ctlTop(bar, sh.ctlF * ctlRoom(bar)); else { bar.style.top = ""; bar.style.bottom = ""; }
+    var up = bar.getBoundingClientRect().top < ctlRoom(bar) / 2, b = $("#slCtlFlip");
+    if (b) { var t = up ? "Move bar to bottom" : "Move bar to top"; b.innerHTML = up ? "&#8595;" : "&#8593;"; b.title = t; b.setAttribute("aria-label", t); }
+  }
+  function ctlKeep() { var bar = $("#slCtl"), sh = SL.show; if (!bar || !sh) return; sh.ctlF = bar.getBoundingClientRect().top / ctlRoom(bar); ctlSave(sh.ctlF); ctlApply(); }
+  function ctlFlip() {
+    var bar = $("#slCtl"), sh = SL.show; if (!bar || !sh) return; var room = ctlRoom(bar);
+    sh.ctlF = bar.getBoundingClientRect().top < room / 2 ? Math.max(0, room - CTL_M) / room : Math.min(1, CTL_M / room);
+    ctlSave(sh.ctlF); ctlApply(); ctlWake();
+  }
+  function ctlWake() { /* the bar fades after 3 s without movement (mouse devices) and returns when the pointer moves */
+    var bar = $("#slCtl"); if (!bar) return; bar.classList.add("awake"); clearTimeout(ctlTimer);
+    ctlTimer = setTimeout(function () { var b = $("#slCtl"); if (!b) return; if (b.matches(":hover") || b.classList.contains("moving")) return ctlWake(); b.classList.remove("awake"); }, 3000);
+  }
+  function ctlWire(root) {
+    var bar = $("#slCtl", root), g = $("#slCtlGrip", root); if (!bar || !g) return;
+    root.addEventListener("pointermove", ctlWake); root.addEventListener("pointerdown", ctlWake);
+    g.addEventListener("pointerdown", function (e) {
+      if (e.button > 0) return; e.preventDefault();
+      var dy = e.clientY - bar.getBoundingClientRect().top; bar.classList.add("moving");
+      try { g.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ }
+      function mv(ev) { ctlTop(bar, ev.clientY - dy); }
+      function up() { g.removeEventListener("pointermove", mv); g.removeEventListener("pointerup", up); g.removeEventListener("pointercancel", up); bar.classList.remove("moving"); ctlKeep(); ctlWake(); }
+      g.addEventListener("pointermove", mv); g.addEventListener("pointerup", up); g.addEventListener("pointercancel", up);
+    });
+    g.addEventListener("click", function (e) { e.stopPropagation(); });
+    ctlWake();
+  }
   /* ------------------------------------------------------------ annotation tools while presenting */
   var INKC = ["#E63946", "#16181D", "#2B7FFF", "#1A9E5A", "#FFD84D", "#FFFFFF"], inkCur = null;
   function inkInit(el) {
     var sh = SL.show; sh.ink = {}; sh.tool = null; sh.col = INKC[0];
     var bar = '<button type="button" class="ink-hide" data-ink="hide" title="Hide the tools (Esc stops drawing)" aria-label="Hide the drawing tools">&#8249;</button><button type="button" class="btn sm sec" data-ink="pen" title="Pen (P)">Pen</button><button type="button" class="btn sm sec" data-ink="hl" title="Highlighter (H)">Marker</button>' +
-      '<button type="button" class="btn sm sec" data-ink="erase" title="Eraser (E)">Eraser</button><button type="button" class="btn sm sec" data-ink="laser" title="Laser pointer (L)">Laser</button><button type="button" class="btn sm sec" data-ink="timer" title="Timer (T)">Timer</button><button type="button" class="btn sm sec" data-ink="dice" title="Dice (D)">Dice</button><div class="sl-ink-sw">' +
+      '<button type="button" class="btn sm sec" data-ink="erase" title="Eraser (E)">Eraser</button><button type="button" class="btn sm sec" data-ink="laser" title="Laser pointer (L)">Laser</button><div class="sl-ink-st">' + ["check", "cross"].map(function (k) { return '<button type="button" class="btn sm sec" data-ink="' + k + '" title="' + STAMP[k].label + '" aria-label="' + STAMP[k].label + '">' + stampIcon(k) + "</button>"; }).join("") + '</div><button type="button" class="btn sm sec" data-ink="timer" title="Timer (T)">Timer</button><button type="button" class="btn sm sec" data-ink="dice" title="Dice (D)">Dice</button><div class="sl-ink-sw">' +
       INKC.map(function (c, i) { return '<button type="button" class="sw' + (i === 0 ? " on" : "") + '" style="background:' + c + '" data-ink-col="' + c + '" aria-label="Ink colour ' + (i + 1) + '"></button>'; }).join("") +
       '</div><button type="button" class="btn sm sec" data-ink="undo" title="Undo (Ctrl+Z)">Undo</button><button type="button" class="btn sm sec" data-ink="clear" title="Clear this slide">Clear</button>';
     el.insertAdjacentHTML("beforeend", '<canvas id="slInk" class="sl-ink"></canvas><div id="slLaser" class="sl-laser" hidden></div><div class="sl-ink-bar" id="slInkBar" role="toolbar" aria-label="Annotation tools">' + bar + '</div><button type="button" class="sl-ink-tab" id="slInkTab" data-ink="showbar" title="Show the drawing tools" aria-label="Show the drawing tools" hidden>&#8250;</button>');
@@ -859,12 +940,18 @@
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
     g.setTransform(d * x.s, 0, 0, d * x.s, d * x.ox, d * x.oy); g.lineCap = "round"; g.lineJoin = "round";
     (SL.show.ink[SL.show.idx] || []).forEach(function (s) {
+      if (s.st) { inkStamp(g, s); return; }
       g.globalAlpha = s.hl ? 0.38 : 1; g.strokeStyle = s.c; g.lineWidth = s.w; g.beginPath();
       s.p.forEach(function (q, i) { if (i) g.lineTo(q[0], q[1]); else g.moveTo(q[0], q[1]); });
       if (s.p.length === 1) g.lineTo(s.p[0][0] + 0.01, s.p[0][1]);
       g.stroke();
     });
     g.globalAlpha = 1;
+  }
+  function inkStamp(g, s) { /* a check or cross, centred on (x, y), 0.4 in wide; strokes with round ends, so it looks the same on every device */
+    var k = STAMP[s.st]; if (!k) return;
+    g.save(); g.globalAlpha = 1; g.translate(s.x - STAMP_SIZE / 2, s.y - STAMP_SIZE / 2);
+    g.strokeStyle = s.c || stampColor(s.st); g.lineWidth = STAMP_LW; g.lineCap = "round"; g.lineJoin = "round"; g.stroke(new Path2D(k.d)); g.restore();
   }
   function inkTool(t) {
     var sh = SL.show; if (!sh) return; sh.tool = sh.tool === t ? null : t; inkCur = null;
@@ -883,6 +970,9 @@
     if (sh.tool === "laser") { inkLaser(e); return; }
     var p = inkPt(e);
     if (sh.tool === "erase") { inkCur = "erase"; inkErase(p); return; }
+    if (STAMP[sh.tool]) { /* press to place; slide the finger or mouse before letting go to fine-tune the spot */
+      var sl = sh.ink[sh.idx] || (sh.ink[sh.idx] = []); inkCur = { st: sh.tool, c: stampColor(sh.tool), x: 0, y: 0 }; inkSpot(inkCur, p); sl.push(inkCur); inkRedraw(); return;
+    }
     var list = sh.ink[sh.idx] || (sh.ink[sh.idx] = []);
     inkCur = { c: sh.col, w: sh.tool === "hl" ? 26 : 5, hl: sh.tool === "hl", p: [p] }; list.push(inkCur); inkRedraw();
   }
@@ -890,12 +980,13 @@
     var sh = SL.show; if (!sh || !sh.tool) return;
     if (sh.tool === "laser") { inkLaser(e); return; }
     if (!inkCur) return; var p = inkPt(e);
-    if (inkCur === "erase") inkErase(p); else { inkCur.p.push(p); inkRedraw(); }
+    if (inkCur === "erase") inkErase(p); else if (inkCur.st) { inkSpot(inkCur, p); inkRedraw(); } else { inkCur.p.push(p); inkRedraw(); }
   }
   function inkUp() { inkCur = null; }
+  function inkSpot(st, p) { st.x = Math.max(0, Math.min(W * PX, p[0])); st.y = Math.max(0, Math.min(H * PX, p[1])); }
   function inkErase(p) {
     var sh = SL.show, l = sh.ink[sh.idx]; if (!l || !l.length) return; var r = 16 / inkXf().s;
-    var keep = l.filter(function (s) { return !s.p.some(function (q) { return Math.hypot(q[0] - p[0], q[1] - p[1]) < r + s.w / 2; }); });
+    var keep = l.filter(function (s) { if (s.st) return Math.hypot(s.x - p[0], s.y - p[1]) >= r + STAMP_SIZE / 2; return !s.p.some(function (q) { return Math.hypot(q[0] - p[0], q[1] - p[1]) < r + s.w / 2; }); });
     if (keep.length !== l.length) { sh.ink[sh.idx] = keep; inkRedraw(); }
   }
   function inkLaser(e) { var L = $("#slLaser"); if (!L) return; L.hidden = false; L.style.left = e.clientX + "px"; L.style.top = e.clientY + "px"; }
@@ -910,8 +1001,9 @@
     if (ic) { inkColor(ic.getAttribute("data-ink-col")); return; }
     if (e.target.closest(".sl-ink-bar") || e.target.closest(".sl-ink-tab")) return;
     var b = e.target.closest("[data-sh]");
-    if (b) { var a = b.getAttribute("data-sh"); if (a === "next") showNext(); else if (a === "prev") showPrev(); else if (a === "exit") exitShow(); else if (a === "full") toggleFs(); return; }
+    if (b) { var a = b.getAttribute("data-sh"); if (a === "next") showNext(); else if (a === "prev") showPrev(); else if (a === "exit") exitShow(); else if (a === "full") toggleFs(); else if (a === "flip") ctlFlip(); return; }
     if (e.target.closest(".sl-ctl")) return;
+    if (trigClick(e, $("#slSbox"))) return; /* a trigger item reveals its items and never advances the slide */
     var r = e.clientX / window.innerWidth; if (r < 0.2) showPrev(); else showNext();
   }
 
