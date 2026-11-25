@@ -55,6 +55,8 @@ body.sl-open{overflow:hidden}
 .slshow{position:fixed;inset:0;z-index:100;background:#000;color:#fff}
 .sl-sbox{position:absolute;inset:0;overflow:hidden}
 .sl-sbox .sl-stage{position:absolute}
+.sl-sbox.zoomed{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}.sl-sbox.zoomed.panning{cursor:grabbing}
+.sl-ctl #slZRes{min-width:54px;font-variant-numeric:tabular-nums}.sl-ctl .btn:disabled{opacity:.4;cursor:default}
 .sl-ctl{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:101;display:flex;gap:8px;align-items:center;background:rgba(22,24,29,.88);padding:8px 12px;border-radius:12px;opacity:.0;transition:opacity .25s;flex-wrap:wrap;justify-content:center;max-width:96vw;color:#fff;font-size:13px}
 .sl-ctl.awake,.sl-ctl.moving,.sl-ctl:has(:focus-visible){opacity:1}
 .sl-ctl.moving{transition:none}

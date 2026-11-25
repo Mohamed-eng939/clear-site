@@ -663,8 +663,8 @@
     var el = $("#slShow"); if (el) el.remove();
     el = document.createElement("div"); el.id = "slShow"; el.className = "slshow"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Slide show");
     document.body.appendChild(el);
-    el.innerHTML = '<div class="sl-sbox" id="slSbox"></div><div class="sl-ctl" id="slCtl"><span class="sl-ctl-grip" id="slCtlGrip" title="Drag to move the bar up or down" aria-label="Drag to move the control bar" role="img">&#8942;&#8942;</span><button type="button" data-sh="flip" id="slCtlFlip" class="btn sm sec" title="Move bar to top" aria-label="Move bar to top">&#8593;</button><button type="button" data-sh="prev" class="btn sm sec" aria-label="Previous">&larr;</button><span id="slCnt"></span><button type="button" data-sh="next" class="btn sm sec" aria-label="Next">&rarr;</button><span id="slAudCtl"></span><button type="button" data-sh="full" class="btn sm sec">Full screen</button><button type="button" data-sh="exit" class="btn sm">Exit</button></div>';
-    inkInit(el); widInit(el); ctlWire(el);
+    el.innerHTML = '<div class="sl-sbox" id="slSbox"></div><div class="sl-ctl" id="slCtl"><span class="sl-ctl-grip" id="slCtlGrip" title="Drag to move the bar up or down" aria-label="Drag to move the control bar" role="img">&#8942;&#8942;</span><button type="button" data-sh="flip" id="slCtlFlip" class="btn sm sec" title="Move bar to top" aria-label="Move bar to top">&#8593;</button><button type="button" data-sh="prev" class="btn sm sec" aria-label="Previous">&larr;</button><span id="slCnt"></span><button type="button" data-sh="next" class="btn sm sec" aria-label="Next">&rarr;</button><button type="button" data-sh="zout" id="slZOut" class="btn sm sec" title="Zoom out (-)" aria-label="Zoom out">&minus;</button><button type="button" data-sh="zreset" id="slZRes" class="btn sm sec" title="Back to 100% (0)" aria-label="Reset zoom to 100%">100%</button><button type="button" data-sh="zin" id="slZIn" class="btn sm sec" title="Zoom in (+)" aria-label="Zoom in">+</button><span id="slAudCtl"></span><button type="button" data-sh="full" class="btn sm sec">Full screen</button><button type="button" data-sh="exit" class="btn sm">Exit</button></div>';
+    inkInit(el); widInit(el); ctlWire(el); zoomWire(el);
     el.addEventListener("click", onShowClick);
     document.addEventListener("keydown", onShowKey, true);
     window.addEventListener("resize", showFit);
@@ -688,12 +688,57 @@
     }
     showFit();
   }
+  /* zoom: the slide is scaled about the middle of the screen and can be dragged around; drawings and stamps use the same transform, so they zoom with the slide */
+  var ZOOMS = [1, 1.25, 1.5, 2, 2.5, 3, 4];
+  function showXf() {
+    var box = $("#slSbox"), sh = SL.show, z = (sh && sh.zoom) || 1, s = Math.min(box.clientWidth / (W * PX), box.clientHeight / (H * PX)) * z;
+    var mx = Math.max(0, (W * PX * s - box.clientWidth) / 2), my = Math.max(0, (H * PX * s - box.clientHeight) / 2);
+    var px = Math.max(-mx, Math.min(mx, (sh && sh.px) || 0)), py = Math.max(-my, Math.min(my, (sh && sh.py) || 0));
+    return { s: s, ox: (box.clientWidth - W * PX * s) / 2 + px, oy: (box.clientHeight - H * PX * s) / 2 + py, px: px, py: py, z: z };
+  }
   function showFit() {
     var box = $("#slSbox"); if (!box) return; var st = box.firstElementChild; if (!st) return;
-    var s = Math.min(box.clientWidth / (W * PX), box.clientHeight / (H * PX)); st.style.transform = "scale(" + s + ")"; st.style.left = (box.clientWidth - W * PX * s) / 2 + "px"; st.style.top = (box.clientHeight - H * PX * s) / 2 + "px"; inkSize(); ctlApply();
+    var x = showXf(); if (SL.show) { SL.show.px = x.px; SL.show.py = x.py; }
+    st.style.transform = "scale(" + x.s + ")"; st.style.left = x.ox + "px"; st.style.top = x.oy + "px"; zoomUI(); inkSize(); ctlApply();
+  }
+  function zoomUI() {
+    var sh = SL.show, z = (sh && sh.zoom) || 1, r = $("#slZRes"), i = $("#slZIn"), o = $("#slZOut"), box = $("#slSbox");
+    if (r) r.textContent = Math.round(z * 100) + "%"; if (i) i.disabled = z >= ZOOMS[ZOOMS.length - 1] - 0.001; if (o) o.disabled = z <= 1.001; if (box) box.classList.toggle("zoomed", z > 1.001);
+  }
+  function zoomTo(z) {
+    var sh = SL.show; if (!sh) return; z = Math.max(1, Math.min(ZOOMS[ZOOMS.length - 1], z)); var old = sh.zoom || 1;
+    sh.px = (sh.px || 0) * z / old; sh.py = (sh.py || 0) * z / old; sh.zoom = z; if (z <= 1.001) { sh.px = 0; sh.py = 0; } showFit();
+  }
+  function zoomStep(d) {
+    var z = (SL.show && SL.show.zoom) || 1, i;
+    if (d > 0) { for (i = 0; i < ZOOMS.length; i++) if (ZOOMS[i] > z + 0.001) return zoomTo(ZOOMS[i]); }
+    else for (i = ZOOMS.length - 1; i >= 0; i--) if (ZOOMS[i] < z - 0.001) return zoomTo(ZOOMS[i]);
+  }
+  function zoomWire(root) {
+    var box = $("#slSbox", root); if (!box) return;
+    box.addEventListener("pointerdown", function (e) { /* drag the zoomed slide; a plain click still works as before */
+      var sh = SL.show; if (!sh) return; sh.noClick = 0; if ((sh.zoom || 1) <= 1.001 || e.button > 0) return;
+      var sx = e.clientX, sy = e.clientY, p0x = sh.px || 0, p0y = sh.py || 0, moved = false;
+      function mv(ev) {
+        var dx = ev.clientX - sx, dy = ev.clientY - sy; if (!moved && Math.hypot(dx, dy) < 6) return;
+        if (!moved) { moved = true; box.classList.add("panning"); }
+        sh.px = p0x + dx; sh.py = p0y + dy; showFit();
+      }
+      function up() { /* listeners sit on the document, so a drag that leaves the window still ends cleanly */
+        document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up); document.removeEventListener("pointercancel", up);
+        box.classList.remove("panning"); if (moved) sh.noClick = Date.now();
+      }
+      document.addEventListener("pointermove", mv); document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
+    });
+    root.addEventListener("wheel", function (e) { /* trackpad pinch or Ctrl + wheel zooms; the wheel moves a zoomed slide */
+      var sh = SL.show; if (!sh || (e.target.closest && e.target.closest(".sl-ctl, .sl-ink-bar, .sl-wid, .slmini"))) return;
+      if (e.ctrlKey || e.metaKey) { e.preventDefault(); var t = Date.now(); if (t - (sh.zT || 0) > 120) { sh.zT = t; zoomStep(e.deltaY < 0 ? 1 : -1); } return; }
+      if ((sh.zoom || 1) > 1.001) { e.preventDefault(); sh.px = (sh.px || 0) - (e.shiftKey ? e.deltaY : e.deltaX); sh.py = (sh.py || 0) - (e.shiftKey ? 0 : e.deltaY); showFit(); }
+    }, { passive: false });
   }
   function drawShow(how) {
     var sh = SL.show, slide = sh.slides[sh.idx], box = $("#slSbox"); if (!box) return;
+    if (sh.zIdx !== sh.idx) { sh.zIdx = sh.idx; sh.zoom = 1; sh.px = 0; sh.py = 0; }
     box.innerHTML = stageHTML(slide, { assets: sh.assets, step: sh.step, edit: false });
     var st = box.firstElementChild; st.classList.add("sl-pos"); showFit();
     var tr = how || slide.tr || "fade"; st.classList.add("tr-" + tr);
@@ -735,6 +780,9 @@
     else if (!e.ctrlKey && !e.metaKey && !e.altKey && { p: "pen", h: "hl", e: "erase", l: "laser" }[k.toLowerCase()]) inkTool({ p: "pen", h: "hl", e: "erase", l: "laser" }[k.toLowerCase()]);
     else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "t" || k === "T")) widToggle("timer");
     else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "d" || k === "D")) widToggle("dice");
+    else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "+" || k === "=")) { e.preventDefault(); zoomStep(1); }
+    else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "-" || k === "_")) { e.preventDefault(); zoomStep(-1); }
+    else if (!e.ctrlKey && !e.metaKey && !e.altKey && k === "0") { e.preventDefault(); zoomTo(1); }
     else if (k === "Home") { SL.show.idx = 0; SL.show.step = 0; drawShow("none"); }
     else if (k === "End") { SL.show.idx = SL.show.slides.length - 1; SL.show.step = 0; drawShow("none"); }
     else if (k === "f" || k === "F") toggleFs();
@@ -928,7 +976,7 @@
     b.classList.toggle("away", inkHidden); t.hidden = !inkHidden;
     try { localStorage.setItem("clear_ink_hidden", inkHidden ? "1" : "0"); } catch (x) { /* optional */ }
   }
-  function inkXf() { var box = $("#slSbox"), s = Math.min(box.clientWidth / (W * PX), box.clientHeight / (H * PX)); return { s: s, ox: (box.clientWidth - W * PX * s) / 2, oy: (box.clientHeight - H * PX * s) / 2 }; }
+  function inkXf() { return showXf(); }
   function inkPt(e) { var x = inkXf(), r = $("#slInk").getBoundingClientRect(); return [(e.clientX - r.left - x.ox) / x.s, (e.clientY - r.top - x.oy) / x.s]; }
   function inkSize() {
     var cv = $("#slInk"); if (!cv || !SL.show) return; var d = window.devicePixelRatio || 1;
@@ -1001,8 +1049,9 @@
     if (ic) { inkColor(ic.getAttribute("data-ink-col")); return; }
     if (e.target.closest(".sl-ink-bar") || e.target.closest(".sl-ink-tab")) return;
     var b = e.target.closest("[data-sh]");
-    if (b) { var a = b.getAttribute("data-sh"); if (a === "next") showNext(); else if (a === "prev") showPrev(); else if (a === "exit") exitShow(); else if (a === "full") toggleFs(); else if (a === "flip") ctlFlip(); return; }
+    if (b) { var a = b.getAttribute("data-sh"); if (a === "next") showNext(); else if (a === "prev") showPrev(); else if (a === "exit") exitShow(); else if (a === "full") toggleFs(); else if (a === "flip") ctlFlip(); else if (a === "zin") zoomStep(1); else if (a === "zout") zoomStep(-1); else if (a === "zreset") zoomTo(1); return; }
     if (e.target.closest(".sl-ctl")) return;
+    if (SL.show && SL.show.noClick && Date.now() - SL.show.noClick < 400) { SL.show.noClick = 0; return; } /* the click that ends a drag of the zoomed slide */
     if (trigClick(e, $("#slSbox"))) return; /* a trigger item reveals its items and never advances the slide */
     var r = e.clientX / window.innerWidth; if (r < 0.2) showPrev(); else showNext();
   }
