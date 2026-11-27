@@ -5,6 +5,8 @@
   var NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main";
   var NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main";
   var NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  var NS_P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"; /* PowerPoint 2010 media extension: embedded video, with trim */
+  var MAXVID = 50 * 1024 * 1024; /* the storage limit for one file */
   var W = 13.333, H = 7.5, MAXW = 1100;
 
   function kids(el, ns, name) { var out = []; if (!el) return out; for (var c = el.firstElementChild; c; c = c.nextElementSibling) if (c.localName === name && (!ns || c.namespaceURI === ns)) out.push(c); return out; }
@@ -23,7 +25,7 @@
 
   function convert(buf) {
     var zip, theme = {}, sldW = 12192000, sldH = 6858000, assets = {}, imgCache = {}, skipped = 0;
-    var textCache = {};
+    var textCache = {}, vidCache = {};
     function text(p) { if (p in textCache) return textCache[p]; var f = zip.file(p); return textCache[p] = f ? f.async("string") : Promise.resolve(null); }
     function xml(p) { return text(p).then(function (t) { return t ? parse(t) : null; }); }
     function relsOf(part) { var d = dirOf(part), n = part.slice(part.lastIndexOf("/") + 1); return xml((d ? d + "/" : "") + "_rels/" + n + ".rels").then(function (doc) { var m = {}; if (doc) all(doc, "http://schemas.openxmlformats.org/package/2006/relationships", "Relationship").forEach(function (r) { m[r.getAttribute("Id")] = { type: r.getAttribute("Type"), target: resolve(part, r.getAttribute("Target")), ext: r.getAttribute("TargetMode") === "External" }; }); return m; }); }
@@ -55,6 +57,21 @@
           assets[id] = { kind: "image", name: name || rel.target.split("/").pop(), mime: "image/jpeg", data: data };
           return id;
         });
+      }).catch(function () { return null; });
+    }
+
+    /* an embedded mp4 becomes a "video" asset holding the file itself (a Blob); the importer in slides.js uploads it to storage. Other formats, online videos and files over 50 MB are skipped. */
+    function addVideo(rid, rels) {
+      var rel = rid && rels[rid]; if (!rel || rel.ext) return Promise.resolve(null);
+      if (vidCache[rel.target]) return vidCache[rel.target];
+      var f = zip.file(rel.target); if (!f) return Promise.resolve(null);
+      var ext = rel.target.split(".").pop().toLowerCase();
+      if (ext !== "mp4" && ext !== "m4v") return vidCache[rel.target] = Promise.resolve(null);
+      return vidCache[rel.target] = f.async("blob").then(function (blob) {
+        if (blob.size > MAXVID) return null;
+        var id = "a" + Object.keys(assets).length;
+        assets[id] = { kind: "video", name: rel.target.split("/").pop(), mime: "video/mp4", blob: new Blob([blob], { type: "video/mp4" }) };
+        return id;
       }).catch(function () { return null; });
     }
 
@@ -109,6 +126,17 @@
           if (tg) it.trigger = "i" + tg;
           if (ln === "cxnSp") { var lc = colorOf(kid(spPr, NS_A, "ln")); if (!lc) return; it.t = "box"; it.shape = "rect"; it.fill = lc; it.paras = [{ al: "l", runs: [{ t: "" }] }]; if (it.w > it.h) it.h = Math.max(it.h, 0.02); else it.w = Math.max(it.w, 0.02); out.push(it); return; }
           if (ln === "pic") {
+            var nvPr = path(el, ["p:nvPicPr", "p:nvPr"]), vfile = nvPr && kid(nvPr, NS_A, "videoFile"), vmed = nvPr && all(nvPr, NS_P14, "media")[0];
+            if (vfile || vmed) { /* a video: the picture inside it is only its poster frame */
+              var emb = vmed && vmed.getAttributeNS(NS_R, "embed"), lnk = vfile && vfile.getAttributeNS(NS_R, "link"), trim = vmed && all(vmed, NS_P14, "trim")[0];
+              return addVideo(emb, ctx.rels).then(function (a1) { return a1 || addVideo(lnk, ctx.rels); }).then(function (aid) {
+                if (!aid) { skipped++; return; }
+                var km = /keep=([\w-]+)/.exec(nm || ""); /* a shape named "Label keep=word": the app carries one playing video across slides that share the word */
+                it.t = "video"; it.src = aid; it.label = ((nm || "").split(" keep=")[0].trim()) || "Video"; if (km) it.keep = km[1];
+                if (trim) { var st = Number(trim.getAttribute("st")) / 1000, en = Number(trim.getAttribute("end")) / 1000; if (st > 0) it.from = Math.round(st * 10) / 10; if (en > 0) it.to = Math.round(en * 10) / 10; }
+                out.push(it);
+              });
+            }
             var blip = path(el, ["p:blipFill", "a:blip"]); if (!blip) return;
             return addImage(blip.getAttributeNS(NS_R, "embed"), ctx.rels, nm).then(function (aid) { if (!aid) { skipped++; return; } it.t = "img"; it.src = aid; out.push(it); });
           }

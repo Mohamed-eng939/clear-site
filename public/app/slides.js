@@ -41,6 +41,13 @@
   function deckById(id) { return SL.decks.filter(function (d) { return d.id === id; })[0]; }
 
   /* ------------------------------------------------------------ rendering a slide */
+  /* video times: "1:28" or "88" or "1:02:03" -> seconds; seconds -> "m:ss" */
+  function parseT(s) {
+    s = String(s == null ? "" : s).trim(); if (!s) return 0;
+    var p = s.split(":").map(Number); if (p.some(function (n) { return !isFinite(n) || n < 0; })) return 0;
+    return Math.round(p.reduce(function (a, n) { return a * 60 + n; }, 0) * 10) / 10;
+  }
+  function fmtT(sec) { sec = Math.max(0, Math.round(Number(sec) || 0)); return Math.floor(sec / 60) + ":" + ("0" + (sec % 60)).slice(-2); }
   function css(o) { return Object.keys(o).map(function (k) { return k + ":" + o[k]; }).join(";"); }
   function itemHTML(it, ctx) {
     var st = { left: it.x * PX + "px", top: it.y * PX + "px", width: it.w * PX + "px", height: it.h * PX + "px" };
@@ -53,6 +60,15 @@
     if (it.t === "img") {
       var a = ctx.assets[it.src];
       return '<div class="' + cls + '" style="' + css(st) + '"' + attrs + ">" + (a && a.data ? '<img alt="" draggable="false" src="data:' + E(a.mime) + ";base64," + a.data + '">' : '<div class="sl-missing">Picture</div>') + "</div>";
+    }
+    if (it.t === "video") {
+      /* a real <video> only where it can play (slide show and the viewer's big slide); thumbnails and the editor show a still placeholder */
+      var va = it.src && ctx.assets[it.src], playable = !ctx.edit && (ctx.live || !ctx.all);
+      if (!va && !ctx.edit) return "";
+      var vin = va && playable
+        ? '<video class="sl-vid" playsinline preload="metadata" controls controlsList="nodownload" data-vsrc="' + E(it.src) + '" data-from="' + (Number(it.from) || 0) + '" data-to="' + (Number(it.to) || 0) + '"' + (it.keep ? ' data-keep="' + E(it.keep) + '"' : "") + "></video>"
+        : '<div class="sl-vid-ph"><span class="sl-vid-ic">&#9654;</span><span class="sl-vid-lb">' + (va ? E(it.label || va.name || "Video") : "Add video here") + "</span></div>";
+      return '<div class="' + cls + (va ? "" : " sl-vid-empty") + '" style="' + css(st) + '"' + attrs + ">" + vin + "</div>";
     }
     if (it.t === "audio") {
       var has = it.src && ctx.assets[it.src];
@@ -201,7 +217,7 @@
     (slide.items || []).forEach(function (i, n) {
       if (i.id === it.id || i.trigger === it.id) return; /* not itself, and never a loop */
       var tx = (i.paras || []).map(function (p) { return p.runs.map(function (r) { return r.t; }).join(""); }).join(" ").replace(/\s+/g, " ").trim();
-      var lb = (n + 1) + ". " + (i.t === "img" ? "Picture" : i.t === "audio" ? "Audio" : tx ? tx.slice(0, 30) + (tx.length > 30 ? "…" : "") : "Shape");
+      var lb = (n + 1) + ". " + (i.t === "img" ? "Picture" : i.t === "audio" ? "Audio" : i.t === "video" ? "Video" : tx ? tx.slice(0, 30) + (tx.length > 30 ? "…" : "") : "Shape");
       o += '<option value="' + E(i.id) + '"' + (it.trigger === i.id ? " selected" : "") + ">" + E(lb) + "</option>";
     });
     return o;
@@ -209,7 +225,7 @@
   function propsHTML() {
     var c = SL.cur, slide = c.slides[c.idx], it = selItem();
     var add = '<div class="sl-add"><b>Add</b><button type="button" class="btn sm sec" data-sl="addtext">Text</button><button type="button" class="btn sm sec" data-sl="addbox">Box</button>' +
-      '<label class="btn sm sec">Picture<input type="file" accept="image/*" data-sl-file="img" hidden></label><label class="btn sm sec">Audio<input type="file" accept=".mp3,.m4a,.wav,audio/mpeg,audio/mp4,audio/wav" data-sl-file="aud" hidden></label></div>';
+      '<label class="btn sm sec">Picture<input type="file" accept="image/*" data-sl-file="img" hidden></label><label class="btn sm sec">Audio<input type="file" accept=".mp3,.m4a,.wav,audio/mpeg,audio/mp4,audio/wav" data-sl-file="aud" hidden></label><label class="btn sm sec">Video<input type="file" accept=".mp4,.m4v,video/mp4" data-sl-file="vid" hidden></label></div>';
     var slideP = '<div class="sl-pg"><b>This slide</b><div class="sl-row"><label>Background</label>' + colorSel("bg", slide.bg, false) + "</div>" +
       '<div class="sl-row"><label for="slTr">Transition</label><select id="slTr" data-sl-in="tr"><option value="fade"' + (slide.tr === "fade" ? " selected" : "") + '>Fade</option><option value="push"' + (slide.tr === "push" ? " selected" : "") + '>Slide in</option><option value="zoom"' + (slide.tr === "zoom" ? " selected" : "") + '>Zoom</option><option value="none"' + (slide.tr === "none" ? " selected" : "") + ">None</option></select></div>" +
       '<div class="sl-row col"><label for="slNote">Teacher notes (students never see these)</label><textarea id="slNote" data-sl-in="note" rows="5">' + E(c.notes[slide.id] || "") + "</textarea></div></div>";
@@ -225,7 +241,7 @@
         '<p class="hint">Drag to move them together. Arrow keys nudge them. Ctrl+C then Ctrl+V copies them. Ctrl and click an item to add it or take it out.</p>' +
         '<div class="sl-row"><button type="button" class="btn sm sec" data-sl="dupitem">Duplicate</button><button type="button" class="btn sm sec" data-sl="front">Bring to front</button><button type="button" class="btn sm sec" data-sl="back">Send back</button><button type="button" class="btn sm danger" data-sl="delitem">Delete</button></div></div>' + slideP;
     }
-    var h = add + '<div class="sl-pg"><b>' + (it.t === "text" ? "Text" : it.t === "box" ? "Box" : it.t === "img" ? "Picture" : "Audio") + "</b>";
+    var h = add + '<div class="sl-pg"><b>' + (it.t === "text" ? "Text" : it.t === "box" ? "Box" : it.t === "img" ? "Picture" : it.t === "video" ? "Video" : "Audio") + "</b>";
     if (it.t === "text" || it.t === "box") {
       var first = it.paras && it.paras[0] && it.paras[0].runs[0] || {};
       h += '<div class="sl-row col"><label for="slTx">Text (one line per paragraph)</label><textarea id="slTx" data-sl-in="text" rows="5">' + E((it.paras || []).map(function (p) { return p.runs.map(function (r) { return r.t; }).join(""); }).join("\n")) + "</textarea></div>" +
@@ -244,6 +260,17 @@
       h += '<div class="sl-row col"><label for="slLb">Button label</label><input id="slLb" value="' + E(it.label || "") + '" data-sl-in="label"></div>' +
         (has ? '<p class="hint">Audio uploaded: ' + E(c.assets[it.src].name || "file") + '</p><div class="sl-row"><button type="button" class="btn sm sec" data-aud="' + E(it.id) + '">Play / pause</button><button type="button" class="btn sm sec" data-sl="rmaudio">Remove audio</button></div>'
           : '<label class="btn sm">Upload audio (mp3, m4a, wav)<input type="file" accept=".mp3,.m4a,.wav,audio/mpeg,audio/mp4,audio/wav" data-sl-file="audfor" hidden></label>');
+    }
+    if (it.t === "video") {
+      var vh = it.src && c.assets[it.src];
+      h += '<div class="sl-row col"><label for="slLb">Label (shown in the slide show bar)</label><input id="slLb" value="' + E(it.label || "") + '" data-sl-in="label" placeholder="Video"></div>' +
+        (vh ? '<p class="hint">Video uploaded: ' + E(vh.name || "file") + '</p>' +
+          '<div class="sl-row"><label for="slVf">Start at</label><input id="slVf" type="text" class="num" value="' + fmtT(it.from) + '" data-sl-in="vfrom" placeholder="0:00" aria-label="Start at (m:ss)"><label for="slVt">Stop at</label><input id="slVt" type="text" class="num" value="' + (it.to ? fmtT(it.to) : "") + '" data-sl-in="vto" placeholder="end" aria-label="Stop at (m:ss)"></div>' +
+          '<div class="sl-row"><label for="slKp">Carry on from the slide before</label><input id="slKp" type="text" value="' + E(it.keep || "") + '" data-sl-in="vkeep" placeholder="same word on both slides"></div>' +
+          '<p class="hint">Give two slides one word here and the video keeps playing when you move from the first to the second (and carries on by itself if it had paused at its stop point).</p>' +
+          '<p class="hint">The video starts at the first time and pauses by itself at the second. Leave "Stop at" empty to play to the end. Use m:ss (for example 1:28) or seconds.</p>' +
+          '<label class="btn sm sec">Replace video<input type="file" accept=".mp4,.m4v,video/mp4" data-sl-file="vidfor" hidden></label>'
+          : '<label class="btn sm">Upload video (mp4, up to 50 MB)<input type="file" accept=".mp4,.m4v,video/mp4" data-sl-file="vidfor" hidden></label>');
     }
     if (it.t === "img") h += '<label class="btn sm sec">Replace picture<input type="file" accept="image/*" data-sl-file="imgfor" hidden></label>';
     h += '<div class="sl-row"><label for="slStep">Appears on click no.</label><input id="slStep" type="number" min="0" max="40" value="' + (it.step || 0) + '" data-sl-in="step"><select data-sl-in="fx" aria-label="Animation"><option value="fade"' + ((it.fx || "fade") === "fade" ? " selected" : "") + '>Fade</option><option value="up"' + (it.fx === "up" ? " selected" : "") + '>Rise</option><option value="zoom"' + (it.fx === "zoom" ? " selected" : "") + '>Pop</option><option value="none"' + (it.fx === "none" ? " selected" : "") + ">Appear</option></select></div>" +
@@ -322,6 +349,9 @@
     else if (k === "anchor") it.anchor = v;
     else if (k === "shape") { it.shape = v; if (v === "round" && it.rad == null) it.rad = 0.2; }
     else if (k === "label") it.label = v;
+    else if (k === "vfrom") { var f0 = parseT(v); if (f0) it.from = f0; else delete it.from; }
+    else if (k === "vkeep") { v = v.trim(); if (v) it.keep = v; else delete it.keep; }
+    else if (k === "vto") { var t0 = parseT(v); if (t0) it.to = t0; else delete it.to; }
     else if (k === "step") it.step = Math.max(0, parseInt(v, 10) || 0);
     else if (k === "fx") it.fx = v;
     else if (k === "pos") it[el.getAttribute("data-k")] = Number(v) || 0;
@@ -491,6 +521,17 @@
       img.src = url;
     });
   }
+  /* reads a video's picture size so the new item has the right shape; null if the browser cannot read it */
+  function probeVideo(file) {
+    return new Promise(function (res) {
+      var v = document.createElement("video"), url = URL.createObjectURL(file), done = function (d) { URL.revokeObjectURL(url); res(d); };
+      v.preload = "metadata"; v.muted = true;
+      v.onloadedmetadata = function () { done(v.videoWidth && v.videoHeight ? { w: v.videoWidth, h: v.videoHeight } : null); };
+      v.onerror = function () { done(null); };
+      setTimeout(function () { done(null); }, 6000);
+      v.src = url;
+    });
+  }
   function onFile(e) {
     var inp = e.target, kind = inp.getAttribute("data-sl-file"), file = inp.files && inp.files[0]; inp.value = ""; if (!file) return;
     var c = SL.cur, sb = A().sb;
@@ -505,6 +546,30 @@
           dirty(); redrawCanvas(); redrawProps();
         });
       }).catch(function (er) { toast(er.message, true); });
+      return;
+    }
+    if (kind === "vid" || kind === "vidfor") {
+      var vext = (file.name.split(".").pop() || "").toLowerCase();
+      if (vext !== "mp4" && vext !== "m4v") { toast("Video must be an mp4 file (H.264). Other formats can be converted to mp4 with a free tool such as HandBrake.", true); return; }
+      if (file.size > 50 * 1024 * 1024) { toast("Videos can be up to 50 MB. Shrink it first (for example 720p in HandBrake).", true); return; }
+      toast("Uploading video… this can take a minute.");
+      var vpath = "decks/" + c.id + "/" + uid() + ".mp4", dims = { w: 16, h: 9 };
+      probeVideo(file).then(function (d) { if (d) dims = d; }).then(function () {
+        return sb.storage.from("materials").upload(vpath, file, { contentType: "video/mp4", upsert: false });
+      }).then(function (r) {
+        if (r.error) throw new Error(r.error.message);
+        return sb.from("deck_assets").insert({ deck_id: c.id, kind: "video", name: file.name, mime: "video/mp4", file_path: vpath }).select("*").single();
+      }).then(function (r) {
+        if (r.error) throw new Error(r.error.message);
+        c.assets[r.data.id] = r.data; snap();
+        if (kind === "vidfor" && selItem()) { var si = selItem(); si.src = r.data.id; delete si.from; delete si.to; }
+        else {
+          var vw = 8, vh2 = vw * dims.h / dims.w; if (vh2 > 5.2) { vh2 = 5.2; vw = vh2 * dims.w / dims.h; }
+          var vi = { id: sid(), t: "video", x: Math.round((W - vw) / 2 * 20) / 20, y: 1.3, w: Math.round(vw * 20) / 20, h: Math.round(vh2 * 20) / 20, step: 0, label: "Video", src: r.data.id };
+          curSlide().items.push(vi); c.sel = vi.id;
+        }
+        dirty(); redrawCanvas(); redrawProps(); toast("Video added. Press Save to keep it.");
+      }).catch(function (er) { toast(er.message || "Upload failed.", true); });
       return;
     }
     var ext = (file.name.split(".").pop() || "").toLowerCase(), mime = AUD_MIME[ext];
@@ -542,7 +607,7 @@
     var c = SL.cur; if (!clip || !clip.items.length) return;
     clip.n++; var off = Math.min(clip.n, 8) * 0.3, ids = [], s = curSlide(), put = [], idm = {};
     clip.items.forEach(function (o) {
-      if ((o.t === "img" || o.t === "audio") && o.src && !c.assets[o.src]) return; /* its file belongs to another deck */
+      if ((o.t === "img" || o.t === "audio" || o.t === "video") && o.src && !c.assets[o.src]) return; /* its file belongs to another deck */
       var d = clone(o); idm[o.id] = d.id = sid(); d.x = Math.round(Math.max(0, Math.min(13.33 - d.w, d.x + off)) * 20) / 20; d.y = Math.round(Math.max(0, Math.min(7.5 - d.h, d.y + off)) * 20) / 20; put.push(d); ids.push(d.id);
     });
     if (!put.length) return toast("Those items can't be pasted into this deck.");
@@ -619,6 +684,60 @@
       return audio.play();
     }).catch(function (er) { toast(er && er.message ? er.message : "Audio could not play.", true); });
   }
+  /* ------------------------------------------------------------ video: a <video> in the slide, optionally trimmed (it.from / it.to, in seconds).
+     The file is a private mp4 in the 'materials' bucket; a signed link is made when the slide is drawn. Only one thing plays at a time (audio or video). */
+  var vurl = {};
+  function assetOf(id) { return (SL.show && SL.show.assets && SL.show.assets[id]) || (SL.cur && SL.cur.assets && SL.cur.assets[id]) || null; }
+  function videoUrl(aid) {
+    var h = vurl[aid]; if (h && h.exp > Date.now()) return h.p;
+    var as = assetOf(aid); if (!as || !as.file_path) return Promise.reject(new Error("This video is not available."));
+    var p = A().sb.storage.from("materials").createSignedUrl(as.file_path, 3600).then(function (r) {
+      if (r.error || !r.data) throw new Error((r.error && r.error.message) || "This video is not available.");
+      return r.data.signedUrl;
+    });
+    vurl[aid] = { p: p, exp: Date.now() + 50 * 60 * 1000 }; p.catch(function () { delete vurl[aid]; });
+    return p;
+  }
+  function vidRoot() { return (SL.show && $("#slSbox")) || document; } /* during the slide show only the slide on screen counts, not the viewer behind it */
+  function allVideos() { return $$("video.sl-vid", vidRoot()); }
+  function playingVideo() { return allVideos().filter(function (v) { return !v.paused && !v.ended; })[0] || null; }
+  function syncVidUI() {
+    var on = !!playingVideo();
+    $$("[data-vid]").forEach(function (b) { b.classList.toggle("playing", on); var ic = $(".sl-vid-bi", b); if (ic) ic.innerHTML = on ? "&#10074;&#10074;" : "&#9654;"; });
+  }
+  function hydrateVideos(root) {
+    $$("video.sl-vid:not([data-ready])", root || document).forEach(function (v) {
+      v.setAttribute("data-ready", "1");
+      var watch = null;
+      function F() { return Number(v.getAttribute("data-from")) || 0; }
+      function T() { return Number(v.getAttribute("data-to")) || 0; }
+      function stopWatch() { if (watch) { clearInterval(watch); watch = null; } }
+      v.addEventListener("loadedmetadata", function () { if (F() > 0 && v.currentTime < F()) { try { v.currentTime = F(); } catch (x) { /* not seekable yet */ } } });
+      v.addEventListener("play", function () {
+        try { audio.pause(); } catch (x) { /* none */ }
+        v._stopped = false;
+        if (T() && v.currentTime >= T() - 0.15) v.currentTime = F(); else if (v.currentTime < F() - 0.3) v.currentTime = F(); /* replay from the start point */
+        $$("video.sl-vid").forEach(function (o) { if (o !== v && !o.paused) o.pause(); });
+        stopWatch(); watch = setInterval(function () { if (T() && v.currentTime >= T()) { v._stopped = true; v.pause(); stopWatch(); } }, 40); /* pauses within a fraction of a second of the stop point */
+        syncVidUI();
+      });
+      ["pause", "ended", "emptied"].forEach(function (ev) { v.addEventListener(ev, function () { stopWatch(); syncVidUI(); }); });
+      v.addEventListener("error", function () { if (v.getAttribute("src")) toast("The video could not be played. It must be an mp4 (H.264).", true); });
+      videoUrl(v.getAttribute("data-vsrc")).then(function (u) { v.src = u; }).catch(function (e) { toast(e.message || "The video could not be loaded.", true); });
+    });
+  }
+  function toggleVideo(itemId) {
+    var v = null;
+    if (itemId) { var box = $$(".sl-video", vidRoot()).filter(function (n) { return n.getAttribute("data-id") === itemId; })[0]; v = box && $("video.sl-vid", box); }
+    if (!v) v = playingVideo() || allVideos()[0]; if (!v) return;
+    if (v.paused) { var pr = v.play(); if (pr && pr.catch) pr.catch(function () { /* blocked or not loaded yet */ }); } else v.pause();
+  }
+  if (window.MutationObserver) new MutationObserver(function (muts) {
+    for (var i = 0; i < muts.length; i++) for (var j = 0; j < muts[i].addedNodes.length; j++) {
+      var n = muts[i].addedNodes[j]; if (n.nodeType === 1 && ((n.matches && n.matches("video.sl-vid")) || (n.querySelector && n.querySelector("video.sl-vid")))) { hydrateVideos(n.parentNode || document); return; }
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  audio.addEventListener("play", function () { $$("video.sl-vid").forEach(function (v) { if (!v.paused) v.pause(); }); });
   function syncAudioUI() {
     var playing = !audio.paused && !!curAud;
     $$("[data-aud]").forEach(function (n) { var on = playing && curAud && n.getAttribute("data-aud") === curAud.id; var ic = $(".sl-aud-ic", n); if (ic) ic.innerHTML = on ? "&#10074;&#10074;" : "&#9654;"; n.classList.toggle("playing", !!on); });
@@ -659,6 +778,7 @@
   /* ------------------------------------------------------------ slide show */
   function startShow() {
     var c = SL.cur; if (!c) return;
+    $$("video.sl-vid").forEach(function (v) { if (!v.paused) v.pause(); });
     SL.show = { slides: c.slides, assets: c.assets, notes: c.notes, idx: c.idx, step: 0, fromEdit: c.mode, ctlF: ctlLoad() };
     var el = $("#slShow"); if (el) el.remove();
     el = document.createElement("div"); el.id = "slShow"; el.className = "slshow"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Slide show");
@@ -739,12 +859,21 @@
   function drawShow(how) {
     var sh = SL.show, slide = sh.slides[sh.idx], box = $("#slSbox"); if (!box) return;
     if (sh.zIdx !== sh.idx) { sh.zIdx = sh.idx; sh.zoom = 1; sh.px = 0; sh.py = 0; }
+    var held = {}; $$("video.sl-vid[data-keep]", box).forEach(function (hv) { held[hv.getAttribute("data-keep")] = hv; }); /* a video on both slides keeps playing (see it.keep) */
     box.innerHTML = stageHTML(slide, { assets: sh.assets, step: sh.step, edit: false });
+    $$("video.sl-vid[data-keep]", box).forEach(function (nv) { /* put the playing element into the new slide in the same task, so the browser never pauses it */
+      var hv = held[nv.getAttribute("data-keep")]; if (!hv || hv.getAttribute("data-vsrc") !== nv.getAttribute("data-vsrc")) return;
+      hv.setAttribute("data-from", nv.getAttribute("data-from")); hv.setAttribute("data-to", nv.getAttribute("data-to"));
+      nv.parentNode.replaceChild(hv, nv);
+      if (hv._stopped) { hv._stopped = false; var pr = hv.play(); if (pr && pr.catch) pr.catch(function () { /* needs a click */ }); } /* it had paused at its stop point: carry on */
+    });
     var st = box.firstElementChild; st.classList.add("sl-pos"); showFit();
     var tr = how || slide.tr || "fade"; st.classList.add("tr-" + tr);
     $("#slCnt").textContent = (sh.idx + 1) + " / " + sh.slides.length + (maxStep(slide) ? "  ·  click " + sh.step + "/" + maxStep(slide) : "");
     var auds = (slide.items || []).filter(function (i) { return i.t === "audio" && i.src && sh.assets[i.src]; });
-    $("#slAudCtl").innerHTML = auds.map(function (i) { return '<button type="button" class="btn sm sec" data-aud="' + E(i.id) + '"><span class="sl-aud-ic">&#9654;</span> ' + E(i.label || "Listen") + "</button>"; }).join("");
+    var vids = (slide.items || []).filter(function (i) { return i.t === "video" && i.src && sh.assets[i.src]; });
+    $("#slAudCtl").innerHTML = auds.map(function (i) { return '<button type="button" class="btn sm sec" data-aud="' + E(i.id) + '"><span class="sl-aud-ic">&#9654;</span> ' + E(i.label || "Listen") + "</button>"; }).join("") +
+      vids.map(function (i) { return '<button type="button" class="btn sm sec" data-vid="' + E(i.id) + '" title="Play or pause the video (V)"><span class="sl-vid-bi">&#9654;</span> ' + E(i.label || "Video") + "</button>"; }).join("");
     syncAudioUI(); inkRedraw();
   }
   function showNext() {
@@ -773,11 +902,13 @@
     if (!SL.show) return;
     var k = e.key;
     if (k !== "Escape" && e.target && e.target.closest && e.target.closest(".sl-wid, .slmini") && (k === " " || k === "Enter" || e.target.tagName === "INPUT")) return; /* Space and Enter press the focused timer, dice or audio button; the slider keeps its arrow keys */
+    if ((k === " " || k === "Enter") && playingVideo()) { e.preventDefault(); e.stopPropagation(); playingVideo().pause(); return; } /* Space pauses a playing video instead of moving on */
     if (k === "ArrowRight" || k === "PageDown" || k === " " || k === "Enter") { e.preventDefault(); e.stopPropagation(); showNext(); }
     else if (k === "ArrowLeft" || k === "PageUp" || k === "Backspace") { e.preventDefault(); e.stopPropagation(); showPrev(); }
     else if (k === "Escape") { e.preventDefault(); e.stopPropagation(); if (SL.show.tool) inkTool(SL.show.tool); else exitShow(); }
     else if ((k === "z" || k === "Z") && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); inkUndo(); }
     else if (!e.ctrlKey && !e.metaKey && !e.altKey && { p: "pen", h: "hl", e: "erase", l: "laser" }[k.toLowerCase()]) inkTool({ p: "pen", h: "hl", e: "erase", l: "laser" }[k.toLowerCase()]);
+    else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "v" || k === "V")) toggleVideo();
     else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "t" || k === "T")) widToggle("timer");
     else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "d" || k === "D")) widToggle("dice");
     else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "+" || k === "=")) { e.preventDefault(); zoomStep(1); }
@@ -1043,6 +1174,8 @@
   function toggleFs() { var el = $("#slShow"); if (!el) return; if (document.fullscreenElement) document.exitFullscreen(); else enterFs(el); }
   function onShowClick(e) {
     if (e.target.closest("[data-aud]")) return;
+    var vb = e.target.closest("[data-vid]"); if (vb) { toggleVideo(vb.getAttribute("data-vid")); return; }
+    if (e.target.closest(".sl-video")) return; /* the video's own controls handle the click; it never advances the slide */
     if (e.target.closest(".sl-wid")) { widClick(e); return; }
     var ik = e.target.closest("[data-ink]"), ic = e.target.closest("[data-ink-col]");
     if (ik) { var ia = ik.getAttribute("data-ink"); if (ia === "hide" || ia === "showbar") { inkHidden = ia === "hide"; inkBarApply(); return; } if (ia === "timer" || ia === "dice") { widToggle(ia); return; } if (ia === "undo") inkUndo(); else if (ia === "clear") inkClear(); else inkTool(ia); return; }
@@ -1152,6 +1285,27 @@
       return p.then(function () { return { slides: slides, notes: {}, assets: assets, skipped: 0 }; });
     });
   }
+  /* assets of a new deck: pictures stay inside the table row (as always); video and audio are uploaded to the private 'materials' bucket and the row keeps only the path.
+     a.blob (browser import) or a.data (base64, from an import bundle) holds the bytes. Fills map (temporary id -> real id) and resolves to the rows to insert. */
+  function prepAssets(deckId, assets, map) {
+    var rows = [], sb = A().sb, p = Promise.resolve();
+    Object.keys(assets).forEach(function (k) {
+      var a = assets[k]; map[k] = uid();
+      if (a.kind === "video" || a.kind === "audio") {
+        p = p.then(function () {
+          return Promise.resolve(a.blob ? a.blob : a.fetchBlob ? a.fetchBlob() : a.data ? new Blob([b64buf(a.data)], { type: a.mime }) : null).then(function (blob) {
+            if (!blob) throw new Error("A " + a.kind + " file is missing from the import.");
+            var ext = ((a.name || "").split(".").pop() || (a.kind === "video" ? "mp4" : "mp3")).toLowerCase().replace(/[^a-z0-9]/g, "") || "mp4", path = "decks/" + deckId + "/" + uid() + "." + ext;
+            return sb.storage.from("materials").upload(path, blob, { contentType: a.mime, upsert: false }).then(function (r) {
+              if (r.error) throw new Error(r.error.message + (a.kind === "video" ? " (videos can be up to 50 MB)" : ""));
+              rows.push({ id: map[k], deck_id: deckId, kind: a.kind, name: a.name, mime: a.mime, file_path: path });
+            });
+          });
+        });
+      } else rows.push({ id: map[k], deck_id: deckId, kind: a.kind, name: a.name, mime: a.mime, data: a.data });
+    });
+    return p.then(function () { return rows; });
+  }
   function pptxBtn(f) {
     if (!isPptx(f)) return "";
     var d = SL.decks.filter(function (x) { return x.source_file_id === f.id; })[0];
@@ -1169,9 +1323,9 @@
     }).then(function (r) { if (!r.ok) throw new Error("Could not download the file."); return r.arrayBuffer(); })
       .then(function (buf) { return isPdf(f) ? pdfToDeck(buf) : window.CLEAR_PPTX.convert(buf); }).then(function (res) {
         if (!res.slides.length) throw new Error("No slides found in that file.");
-        var deckId = uid(), map = {}, rows = [];
-        Object.keys(res.assets).forEach(function (k) { map[k] = uid(); var a = res.assets[k]; rows.push({ id: map[k], deck_id: deckId, kind: a.kind, name: a.name, mime: a.mime, data: a.data }); });
-        res.slides.forEach(function (sl) { sl.items.forEach(function (i) { if (i.t === "img" && i.src) i.src = map[i.src]; }); });
+        var deckId = uid(), map = {};
+        return prepAssets(deckId, res.assets, map).then(function (rows) {
+        res.slides.forEach(function (sl) { sl.items.forEach(function (i) { if ((i.t === "img" || i.t === "video") && i.src) i.src = map[i.src]; }); });
         return sb.from("decks").insert({ id: deckId, cur_lesson_id: f.lesson_id, title: f.title || f.file_name.replace(/\.(pptx|pdf)$/i, ""), slides: res.slides, visible_to_students: !!f.for_student, source_file_id: f.id })
           .select("id,cur_lesson_id,title,visible_to_students,updated_at,source_file_id").single().then(function (ins) {
             if (ins.error) { if (String(ins.error.code) === "23505") { load(true); return null; } throw new Error(ins.error.message); }
@@ -1179,10 +1333,11 @@
             for (var i = 0; i < rows.length; i += 4) (function (part) { p = p.then(function () { return sb.from("deck_assets").insert(part).then(function (r2) { if (r2.error) throw new Error(r2.error.message); }); }); })(rows.slice(i, i + 4));
             return p.then(function () { return sb.from("deck_notes").upsert({ deck_id: deckId, notes: res.notes || {} }); }).then(function () {
               SL.decks.push(ins.data);
-              toast("Slides ready: " + ins.data.title + (res.skipped ? " (" + res.skipped + " tables or charts could not be converted)" : ""));
+              toast("Slides ready: " + ins.data.title + (res.skipped ? " (" + res.skipped + " items such as tables, charts or unsupported videos could not be converted)" : ""));
               return ins.data;
             });
           });
+        });
       }).catch(function (e) { tried[f.id] = 1; toast("Could not convert to slides: " + (e.message || e), true); return null; })
       .then(function (d) { delete busy[f.id]; return d; });
   }
@@ -1212,10 +1367,15 @@
   function doImport(job) {
     var sb = A().sb, bucket = sb.storage.from("materials");
     toast("Importing " + job.name + "…");
-    return fetch(job.file, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("Import file not found (" + job.file + ")"); return r.arrayBuffer(); }).then(function (buf) {
-      var u = new Uint8Array(buf), iv = u.slice(0, 12), ct = u.slice(12);
-      return crypto.subtle.importKey("raw", hex2buf(job.key), "AES-GCM", false, ["decrypt"]).then(function (k) { return crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, k, ct); });
-    }).then(function (pt) {
+    /* an encrypted file shipped with the app: first 12 bytes are the IV. Big binaries (video, large files) are separate .enc files named in the bundle ("ext"), same key. */
+    function openEnc(file) {
+      return fetch(file, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("Import file not found (" + file + ")"); return r.arrayBuffer(); }).then(function (buf) {
+        var u = new Uint8Array(buf), iv = u.slice(0, 12), ct = u.slice(12);
+        return crypto.subtle.importKey("raw", hex2buf(job.key), "AES-GCM", false, ["decrypt"]).then(function (k) { return crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, k, ct); });
+      });
+    }
+    function openExt(file, mime) { return openEnc(file).then(function (pt) { return new Blob([pt], { type: mime }); }); }
+    return openEnc(job.file).then(function (pt) {
       var B = JSON.parse(new TextDecoder().decode(pt)), parts = B.lesson_ref.split(":");
       return sb.from("cur_levels").select("id").eq("code", parts[0]).maybeSingle().then(function (lv) {
         return sb.from("cur_lessons").select("id").eq("level_id", lv.data.id).eq("number", Number(parts[1])).maybeSingle();
@@ -1224,24 +1384,28 @@
         if (B.deck) {
           chain = chain.then(function () { return sb.from("decks").select("id").eq("cur_lesson_id", lid).eq("title", B.deck.title).maybeSingle(); }).then(function (ex) {
             if (ex.data) return;
-            var deckId = uid(), map = {}, rows = [];
-            Object.keys(B.assets).forEach(function (k) { map[k] = uid(); rows.push({ id: map[k], deck_id: deckId, kind: B.assets[k].kind, name: B.assets[k].name, mime: B.assets[k].mime, data: B.assets[k].data }); });
-            B.deck.slides.forEach(function (s) { s.items.forEach(function (i) { if (i.t === "img" && i.src) i.src = map[i.src]; }); });
-            return sb.from("decks").insert({ id: deckId, cur_lesson_id: lid, title: B.deck.title, slides: B.deck.slides, visible_to_students: false }).then(function (r1) {
-              if (r1.error) throw new Error(r1.error.message);
-              var p = Promise.resolve();
-              for (var i = 0; i < rows.length; i += 4) (function (part) { p = p.then(function () { return sb.from("deck_assets").insert(part).then(function (r2) { if (r2.error) throw new Error(r2.error.message); }); }); })(rows.slice(i, i + 4));
-              return p.then(function () { return sb.from("deck_notes").upsert({ deck_id: deckId, notes: B.notes || {} }); });
+            var deckId = uid(), map = {};
+            Object.keys(B.assets || {}).forEach(function (k) { var a = B.assets[k]; if (a.ext) a.fetchBlob = function () { return openExt(a.ext, a.mime); }; });
+            return prepAssets(deckId, B.assets || {}, map).then(function (rows) {
+              B.deck.slides.forEach(function (s) { s.items.forEach(function (i) { if ((i.t === "img" || i.t === "video") && i.src) i.src = map[i.src]; }); });
+              return sb.from("decks").insert({ id: deckId, cur_lesson_id: lid, title: B.deck.title, slides: B.deck.slides, visible_to_students: false }).then(function (r1) {
+                if (r1.error) throw new Error(r1.error.message);
+                var p = Promise.resolve();
+                for (var i = 0; i < rows.length; i += 4) (function (part) { p = p.then(function () { return sb.from("deck_assets").insert(part).then(function (r2) { if (r2.error) throw new Error(r2.error.message); }); }); })(rows.slice(i, i + 4));
+                return p.then(function () { return sb.from("deck_notes").upsert({ deck_id: deckId, notes: B.notes || {} }); });
+              });
             });
           });
         }
         (B.files || []).forEach(function (f) {
           chain = chain.then(function () { return sb.from("cur_files").select("id").eq("lesson_id", lid).eq("file_name", f.file_name).maybeSingle(); }).then(function (ex) {
             if (ex.data) return;
-            var path = "kits/" + lid + "/" + uid() + "-" + f.file_name.replace(/[^\w.\-]+/g, "-"), bytes = b64buf(f.b64);
-            return bucket.upload(path, new Blob([bytes], { type: f.mime }), { contentType: f.mime, upsert: false }).then(function (up) {
-              if (up.error) throw new Error(up.error.message);
-              return sb.from("cur_files").insert({ lesson_id: lid, kind: f.kind, title: f.title, for_student: f.for_student, file_path: path, file_name: f.file_name, mime: f.mime, size_bytes: bytes.length });
+            var path = "kits/" + lid + "/" + uid() + "-" + f.file_name.replace(/[^\w.\-]+/g, "-");
+            return (f.ext ? openExt(f.ext, f.mime) : Promise.resolve(new Blob([b64buf(f.b64)], { type: f.mime }))).then(function (blob) {
+              return bucket.upload(path, blob, { contentType: f.mime, upsert: false }).then(function (up) {
+                if (up.error) throw new Error(up.error.message);
+                return sb.from("cur_files").insert({ lesson_id: lid, kind: f.kind, title: f.title, for_student: f.for_student, file_path: path, file_name: f.file_name, mime: f.mime, size_bytes: blob.size });
+              });
             }).then(function (ins) { if (ins.error) throw new Error(ins.error.message); });
           });
         });

@@ -37,6 +37,13 @@ body.sl-open{overflow:hidden}
 .sl-aud.playing{background:#16181D}.sl-aud.playing .sl-aud-ic{color:#16181D}
 .sl-aud-empty{align-items:center;justify-content:center;background:#FFD84D;border:2px dashed #16181D;border-radius:10px}
 .sl-aud-ph{font:600 18px/1.2 "Montserrat",sans-serif;color:#16181D;padding:0 12px}
+/* video items: a real player in the slide show and viewer; a still placeholder in thumbnails and the editor */
+.sl-it.sl-video{background:#000;overflow:hidden}
+.sl-video video.sl-vid{width:100%;height:100%;display:block;background:#000;object-fit:contain}
+.sl-vid-ph{width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#16181D;color:#fff;font:600 24px/1.2 "Montserrat",sans-serif;text-align:center;padding:10px}
+.sl-vid-ic{display:grid;place-items:center;width:84px;height:84px;border-radius:50%;background:#E63946;color:#fff;font-size:34px;padding-left:6px;box-sizing:border-box}
+.sl-vid-empty{background:#FFD84D;border:2px dashed #16181D}.sl-vid-empty .sl-vid-ph{background:#FFD84D;color:#16181D}
+.sl-vid-bi{display:inline-block;min-width:1em;text-align:center}
 .sl-it.sel{outline:3px solid #2b7fff;outline-offset:1px;cursor:move}
 .sl-rs{position:absolute;right:-9px;bottom:-9px;width:18px;height:18px;background:#2b7fff;border:2px solid #fff;border-radius:4px;cursor:nwse-resize;z-index:3}
 .sl-anim.trg{background:#E63946;color:#fff;border-color:#16181D;font-size:15px}
