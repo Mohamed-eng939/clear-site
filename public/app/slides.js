@@ -163,8 +163,9 @@
       (isStaff() ? (edit ? '<button type="button" class="btn sm sec" data-sl="undo">Undo</button><button type="button" class="btn sm" data-sl="save"' + (c.dirty ? "" : " disabled") + '>Save</button><button type="button" class="btn sm sec" data-sl="view">Done editing</button>'
         : '<button type="button" class="btn sm sec" data-sl="edit">Edit</button>') : "") +
       '<button type="button" class="btn sm sec" data-sl="close">Close</button></div></div>';
+    var msel = edit ? slSelIds() : [];
     var thumbs = '<div class="sl-thumbs" id="slThumbs">' + c.slides.map(function (s, i) {
-      return '<div role="button" tabindex="0"' + (edit ? ' draggable="true" title="Drag to move this slide"' : "") + ' class="sl-th' + (i === c.idx ? " cur" : "") + '" data-sl="goto" data-i="' + i + '" aria-label="Slide ' + (i + 1) + '"><span class="sl-n">' + (i + 1) + '</span><span class="sl-fit">' + stageHTML(s, { assets: c.assets, all: true, edit: edit }) + "</span></div>";
+      return '<div role="button" tabindex="0"' + (edit ? ' draggable="true" title="Drag to move this slide. Shift+click selects a range, Ctrl+click adds one."' : "") + ' class="sl-th' + (i === c.idx ? " cur" : "") + (msel.indexOf(s.id) >= 0 ? " msel" : "") + '" data-sl="goto" data-i="' + i + '" aria-label="Slide ' + (i + 1) + '"><span class="sl-n">' + (i + 1) + '</span><span class="sl-fit">' + stageHTML(s, { assets: c.assets, all: true, edit: edit }) + "</span></div>";
     }).join("") + (edit ? '<div class="sl-th-acts"><button type="button" class="btn sm sec" data-sl="addslide">+ Slide</button><button type="button" class="btn sm sec" data-sl="dupslide">Duplicate</button><button type="button" class="btn sm sec" data-sl="up">&uarr;</button><button type="button" class="btn sm sec" data-sl="down">&darr;</button><button type="button" class="btn sm sec" data-sl="delslide">Delete</button></div>' : "") + "</div>";
     var slide = c.slides[c.idx];
     var main = '<div class="sl-main"><div class="sl-canvas" style="width:100%;max-width:1100px;margin:0 auto"><div class="sl-fit" id="slCanvas" data-edit="' + (edit ? 1 : 0) + '">' + stageHTML(slide, { assets: c.assets, all: true, edit: edit, live: !edit }) + "</div></div>" +
@@ -640,15 +641,38 @@
     if (a === "show") return startShow();
     if (a === "edit") { c.mode = "edit"; return refreshApp(); }
     if (a === "view") { c.mode = "view"; c.sel = null; return refreshApp(); }
-    if (a === "goto") { c.idx = Number(b.getAttribute("data-i")); c.sel = null; return refreshApp(); }
+    if (a === "goto") {
+      var gi = Number(b.getAttribute("data-i")), gs = c.slides[gi];
+      if (c.mode === "edit" && slMods.shift) { /* Shift+click: every slide from the last plain click to this one */
+        var ai = indexOfSlide(c.anchor); if (ai < 0) ai = c.idx; var lo = Math.min(ai, gi), hi = Math.max(ai, gi);
+        c.slSel = c.slides.slice(lo, hi + 1).map(function (x) { return x.id; });
+      } else if (c.mode === "edit" && slMods.mod && gs) { /* Ctrl or Cmd+click: add or take away one slide */
+        var cur = slSelIds(); if (!cur.length) cur = [c.slides[c.idx].id]; var at = cur.indexOf(gs.id);
+        if (at >= 0) cur.splice(at, 1); else cur.push(gs.id); c.slSel = cur; c.anchor = gs.id;
+      } else { c.slSel = []; c.anchor = gs && gs.id; }
+      c.idx = gi; c.sel = null; return refreshApp();
+    }
     if (a === "prev") return go(-1);
     if (a === "next") return go(1);
     if (a === "save") return save();
     if (a === "undo") return undo();
     if (a === "addslide") { snap(); var ns = blankSlide("New slide"); c.slides.splice(c.idx + 1, 0, ns); c.idx++; c.sel = null; dirty(); return refreshApp(); }
-    if (a === "dupslide") { snap(); var cp = clone(curSlide()); cp.id = "s" + Math.random().toString(36).slice(2, 8); var idm = {}; cp.items.forEach(function (i) { var n = sid(); idm[i.id] = n; i.id = n; }); remapTrig(cp.items, idm, cp.items); c.notes[cp.id] = c.notes[curSlide().id] || ""; c.slides.splice(c.idx + 1, 0, cp); c.idx++; dirty(); return refreshApp(); }
+    if (a === "dupslide") {
+      snap(); var ids = slPick(), last = 0, copies = [];
+      c.slides.forEach(function (x, i) { if (ids.indexOf(x.id) >= 0) last = i; });
+      c.slides.filter(function (x) { return ids.indexOf(x.id) >= 0; }).forEach(function (src) {
+        var cp = clone(src); cp.id = "s" + Math.random().toString(36).slice(2, 8); var idm = {}; cp.items.forEach(function (i) { var n = sid(); idm[i.id] = n; i.id = n; }); remapTrig(cp.items, idm, cp.items); c.notes[cp.id] = c.notes[src.id] || ""; copies.push(cp);
+      });
+      Array.prototype.splice.apply(c.slides, [last + 1, 0].concat(copies)); c.idx = last + 1; c.slSel = copies.length > 1 ? copies.map(function (x) { return x.id; }) : []; c.anchor = copies[0].id; c.sel = null; dirty(); return refreshApp();
+    }
     if (a === "delslide") return delSlide(true);
-    if (a === "up" || a === "down") { var j = c.idx + (a === "up" ? -1 : 1); if (j < 0 || j >= c.slides.length) return; snap(); var t = c.slides[c.idx]; c.slides[c.idx] = c.slides[j]; c.slides[j] = t; c.idx = j; dirty(); return refreshApp(); }
+    if (a === "up" || a === "down") {
+      var pk = slPick(), arr = c.slides, here = arr[c.idx].id, n = arr.length, mv = false, ix, t; /* each picked slide swaps with its neighbour unless that one is picked too, so a block moves as one */
+      snap();
+      if (a === "up") { for (ix = 1; ix < n; ix++) if (pk.indexOf(arr[ix].id) >= 0 && pk.indexOf(arr[ix - 1].id) < 0) { t = arr[ix]; arr[ix] = arr[ix - 1]; arr[ix - 1] = t; mv = true; } }
+      else { for (ix = n - 2; ix >= 0; ix--) if (pk.indexOf(arr[ix].id) >= 0 && pk.indexOf(arr[ix + 1].id) < 0) { t = arr[ix]; arr[ix] = arr[ix + 1]; arr[ix + 1] = t; mv = true; } }
+      if (!mv) { c.undo.pop(); return; } c.idx = indexOfSlide(here); dirty(); return refreshApp();
+    }
     if (a === "addtext" || a === "addbox") { snap(); var it = newItem(a === "addtext" ? "text" : "box"); curSlide().items.push(it); c.sel = it.id; dirty(); redrawCanvas(); return redrawProps(); }
     if (a === "delitem") return delItem();
     if (a === "dupitem") { var s0 = selItems(); if (!s0.length) return; snap(); var nids = [], dm = {}, fresh = []; s0.forEach(function (o) { var d = clone(o); dm[o.id] = d.id = sid(); d.x += 0.3; d.y += 0.3; curSlide().items.push(d); nids.push(d.id); fresh.push(d); }); remapTrig(fresh, dm, curSlide().items); setSelIds(nids); dirty(); redrawCanvas(); return redrawProps(); }
@@ -657,12 +681,19 @@
     if (a === "color") return setCol(b.getAttribute("data-name"), b.getAttribute("data-v"));
     if (a === "rmaudio") { var s3 = selItem(); if (!s3) return; snap(); s3.src = null; dirty(); redrawCanvas(); return redrawProps(); }
   }
+  /* slide multi-selection: Shift+click picks a range, Ctrl or Cmd+click adds or removes one. c.slSel holds slide ids (they survive moves); with fewer than two the one on screen is "the selection" */
+  var slMods = { shift: false, mod: false };
+  function indexOfSlide(id) { var c = SL.cur; if (!c || !id) return -1; for (var i = 0; i < c.slides.length; i++) if (c.slides[i].id === id) return i; return -1; }
+  function slSelIds() { var c = SL.cur; if (!c || !c.slSel) return []; var ids = c.slSel.filter(function (id) { return indexOfSlide(id) >= 0; }); return ids.length > 1 ? ids : []; }
+  function slPick() { var m = slSelIds(); return m.length ? m : [SL.cur.slides[SL.cur.idx].id]; }
   function delSlide(ask) {
     var c = SL.cur; if (!c || c.mode !== "edit") return;
-    if (c.slides.length < 2) return toast("A deck needs at least one slide.");
-    if (ask && !window.confirm("Delete this slide?")) return;
-    snap(); var i = c.idx; c.slides.splice(i, 1); c.idx = Math.min(i, c.slides.length - 1); c.sel = null; dirty(); refreshApp();
-    if (!ask) toast("Slide " + (i + 1) + " deleted. Ctrl+Z or Undo brings it back.");
+    var ids = slPick(), k = ids.length;
+    if (k >= c.slides.length) return toast(k > 1 ? "A deck needs at least one slide. Keep one." : "A deck needs at least one slide.");
+    if (ask && !window.confirm(k > 1 ? "Delete these " + k + " slides?" : "Delete this slide?")) return;
+    snap(); var first = c.slides.length; c.slides.forEach(function (x, i) { if (ids.indexOf(x.id) >= 0) first = Math.min(first, i); });
+    c.slides = c.slides.filter(function (x) { return ids.indexOf(x.id) < 0; }); c.idx = Math.min(first, c.slides.length - 1); c.slSel = []; c.anchor = c.slides[c.idx].id; c.sel = null; dirty(); refreshApp();
+    if (!ask) toast((k > 1 ? k + " slides" : "Slide " + (first + 1)) + " deleted. Ctrl+Z or Undo brings " + (k > 1 ? "them" : "it") + " back.");
   }
   /* drag a slide in the list to move it before or after another one */
   var thDrag = null;
@@ -673,7 +704,9 @@
   function thClear() { $$("#slThumbs .sl-th").forEach(function (t) { t.classList.remove("dbefore", "dafter", "dragging"); }); }
   document.addEventListener("dragstart", function (e) {
     var th = e.target.closest && e.target.closest("#slThumbs .sl-th[draggable]"); if (!th || !SL.cur || SL.cur.mode !== "edit") return;
-    thDrag = Number(th.getAttribute("data-i")); th.classList.add("dragging");
+    var di = Number(th.getAttribute("data-i")), grp = slSelIds(), me = SL.cur.slides[di];
+    if (grp.length && me && grp.indexOf(me.id) >= 0) thDrag = grp; else { thDrag = [me.id]; SL.cur.slSel = []; } /* dragging a slide that is not part of the selection moves just that one */
+    $$("#slThumbs .sl-th").forEach(function (t) { var sl = SL.cur.slides[Number(t.getAttribute("data-i"))]; if (sl && thDrag.indexOf(sl.id) >= 0) t.classList.add("dragging"); });
     try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "slide " + (thDrag + 1)); } catch (x) { /* ignore */ }
   });
   document.addEventListener("dragover", function (e) {
@@ -686,13 +719,16 @@
     if (th) th.classList.add(thSide(box, th, e) === "before" ? "dbefore" : "dafter");
   });
   document.addEventListener("drop", function (e) {
-    if (thDrag == null) return; var c = SL.cur, box = $("#slThumbs"), th = e.target.closest && e.target.closest("#slThumbs .sl-th"), from = thDrag; thDrag = null;
+    if (thDrag == null) return; var c = SL.cur, box = $("#slThumbs"), th = e.target.closest && e.target.closest("#slThumbs .sl-th"), ids = thDrag; thDrag = null;
     e.preventDefault(); if (!c || !box || !th) { thClear(); return; }
-    var to = Number(th.getAttribute("data-i")) + (thSide(box, th, e) === "after" ? 1 : 0); if (from < to) to--; thClear();
-    if (to === from || to < 0 || to >= c.slides.length) return;
-    snap(); var m = c.slides.splice(from, 1)[0]; c.slides.splice(to, 0, m); c.idx = to; c.sel = null; dirty(); refreshApp();
+    var tgt = c.slides[Number(th.getAttribute("data-i"))], after = thSide(box, th, e) === "after"; thClear();
+    if (!tgt || ids.indexOf(tgt.id) >= 0) return; /* dropped on itself or inside its own group */
+    var moved = c.slides.filter(function (x) { return ids.indexOf(x.id) >= 0; }), rest = c.slides.filter(function (x) { return ids.indexOf(x.id) < 0; }), at = rest.indexOf(tgt) + (after ? 1 : 0);
+    var next = rest.slice(0, at).concat(moved, rest.slice(at)), same = next.every(function (x, i) { return x === c.slides[i]; }); if (same) return;
+    snap(); var here = c.slides[c.idx].id; c.slides = next; c.idx = indexOfSlide(ids.indexOf(here) >= 0 ? here : moved[0].id); c.slSel = moved.length > 1 ? moved.map(function (x) { return x.id; }) : []; c.sel = null; dirty(); refreshApp();
   });
   document.addEventListener("dragend", function () { thDrag = null; thClear(); });
+  document.addEventListener("click", function (e) { slMods.shift = e.shiftKey; slMods.mod = e.ctrlKey || e.metaKey; }, true); /* read by the slide-list click, which runs after this */
   document.addEventListener("keydown", function (e) {
     if ((e.key === "Enter" || e.key === " ") && e.target.classList && e.target.classList.contains("sl-th")) { e.preventDefault(); slAct("goto", e.target); }
   });
