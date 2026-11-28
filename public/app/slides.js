@@ -819,7 +819,7 @@
   function showFit() {
     var box = $("#slSbox"); if (!box) return; var st = box.firstElementChild; if (!st) return;
     var x = showXf(); if (SL.show) { SL.show.px = x.px; SL.show.py = x.py; }
-    st.style.transform = "scale(" + x.s + ")"; st.style.left = x.ox + "px"; st.style.top = x.oy + "px"; zoomUI(); inkSize(); ctlApply();
+    st.style.transform = "scale(" + x.s + ")"; st.style.left = x.ox + "px"; st.style.top = x.oy + "px"; zoomUI(); inkSize(); inkTxPlace(); ctlApply();
   }
   function zoomUI() {
     var sh = SL.show, z = (sh && sh.zoom) || 1, r = $("#slZRes"), i = $("#slZIn"), o = $("#slZOut"), box = $("#slSbox");
@@ -857,6 +857,7 @@
     }, { passive: false });
   }
   function drawShow(how) {
+    inkTxCommit();
     var sh = SL.show, slide = sh.slides[sh.idx], box = $("#slSbox"); if (!box) return;
     if (sh.zIdx !== sh.idx) { sh.zIdx = sh.idx; sh.zoom = 1; sh.px = 0; sh.py = 0; }
     var held = {}; $$("video.sl-vid[data-keep]", box).forEach(function (hv) { held[hv.getAttribute("data-keep")] = hv; }); /* a video on both slides keeps playing (see it.keep) */
@@ -887,7 +888,7 @@
     if (sh.idx > 0) { sh.idx--; sh.step = maxStep(sh.slides[sh.idx]); drawShow("none"); }
   }
   function exitShow() {
-    var sh = SL.show; if (!sh) return;
+    var sh = SL.show; if (!sh) return; inkTxCancel();
     document.removeEventListener("keydown", onShowKey, true); window.removeEventListener("resize", showFit); document.removeEventListener("fullscreenchange", onFsChange);
     clearTimeout(ctlTimer);
     try { if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock(); } catch (x) { /* optional */ }
@@ -901,13 +902,14 @@
   function onShowKey(e) {
     if (!SL.show) return;
     var k = e.key;
+    if (e.target && e.target.classList && e.target.classList.contains("sl-tx")) return; /* typing a label: the box has its own keys (Enter, Esc) */
     if (k !== "Escape" && e.target && e.target.closest && e.target.closest(".sl-wid, .slmini") && (k === " " || k === "Enter" || e.target.tagName === "INPUT")) return; /* Space and Enter press the focused timer, dice or audio button; the slider keeps its arrow keys */
     if ((k === " " || k === "Enter") && playingVideo()) { e.preventDefault(); e.stopPropagation(); playingVideo().pause(); return; } /* Space pauses a playing video instead of moving on */
     if (k === "ArrowRight" || k === "PageDown" || k === " " || k === "Enter") { e.preventDefault(); e.stopPropagation(); showNext(); }
     else if (k === "ArrowLeft" || k === "PageUp" || k === "Backspace") { e.preventDefault(); e.stopPropagation(); showPrev(); }
     else if (k === "Escape") { e.preventDefault(); e.stopPropagation(); if (SL.show.tool) inkTool(SL.show.tool); else exitShow(); }
     else if ((k === "z" || k === "Z") && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); inkUndo(); }
-    else if (!e.ctrlKey && !e.metaKey && !e.altKey && { p: "pen", h: "hl", e: "erase", l: "laser" }[k.toLowerCase()]) inkTool({ p: "pen", h: "hl", e: "erase", l: "laser" }[k.toLowerCase()]);
+    else if (!e.ctrlKey && !e.metaKey && !e.altKey && { p: "pen", h: "hl", e: "erase", l: "laser", a: "text" }[k.toLowerCase()]) inkTool({ p: "pen", h: "hl", e: "erase", l: "laser", a: "text" }[k.toLowerCase()]);
     else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "v" || k === "V")) toggleVideo();
     else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "t" || k === "T")) widToggle("timer");
     else if (!e.ctrlKey && !e.metaKey && !e.altKey && (k === "d" || k === "D")) widToggle("dice");
@@ -959,7 +961,7 @@
   function inkInit(el) {
     var sh = SL.show; sh.ink = {}; sh.tool = null; sh.col = INKC[0];
     var bar = '<button type="button" class="ink-hide" data-ink="hide" title="Hide the tools (Esc stops drawing)" aria-label="Hide the drawing tools">&#8249;</button><button type="button" class="btn sm sec" data-ink="pen" title="Pen (P)">Pen</button><button type="button" class="btn sm sec" data-ink="hl" title="Highlighter (H)">Marker</button>' +
-      '<button type="button" class="btn sm sec" data-ink="erase" title="Eraser (E)">Eraser</button><button type="button" class="btn sm sec" data-ink="laser" title="Laser pointer (L)">Laser</button><div class="sl-ink-st">' + ["check", "cross"].map(function (k) { return '<button type="button" class="btn sm sec" data-ink="' + k + '" title="' + STAMP[k].label + '" aria-label="' + STAMP[k].label + '">' + stampIcon(k) + "</button>"; }).join("") + '</div><button type="button" class="btn sm sec" data-ink="timer" title="Timer (T)">Timer</button><button type="button" class="btn sm sec" data-ink="dice" title="Dice (D)">Dice</button><div class="sl-ink-sw">' +
+      '<button type="button" class="btn sm sec" data-ink="erase" title="Eraser (E)">Eraser</button><button type="button" class="btn sm sec" data-ink="laser" title="Laser pointer (L)">Laser</button><button type="button" class="btn sm sec" data-ink="text" title="Text (A): click to type, drag to move, click text to edit">Text</button><div class="sl-ink-sz"><button type="button" class="btn sm sec" data-ink="tsm" title="Smaller text" aria-label="Smaller text">A&minus;</button><button type="button" class="btn sm sec" data-ink="tlg" title="Larger text" aria-label="Larger text">A+</button></div><div class="sl-ink-st">' + ["check", "cross"].map(function (k) { return '<button type="button" class="btn sm sec" data-ink="' + k + '" title="' + STAMP[k].label + '" aria-label="' + STAMP[k].label + '">' + stampIcon(k) + "</button>"; }).join("") + '</div><button type="button" class="btn sm sec" data-ink="timer" title="Timer (T)">Timer</button><button type="button" class="btn sm sec" data-ink="dice" title="Dice (D)">Dice</button><div class="sl-ink-sw">' +
       INKC.map(function (c, i) { return '<button type="button" class="sw' + (i === 0 ? " on" : "") + '" style="background:' + c + '" data-ink-col="' + c + '" aria-label="Ink colour ' + (i + 1) + '"></button>'; }).join("") +
       '</div><button type="button" class="btn sm sec" data-ink="undo" title="Undo (Ctrl+Z)">Undo</button><button type="button" class="btn sm sec" data-ink="clear" title="Clear this slide">Clear</button>';
     el.insertAdjacentHTML("beforeend", '<canvas id="slInk" class="sl-ink"></canvas><div id="slLaser" class="sl-laser" hidden></div><div class="sl-ink-bar" id="slInkBar" role="toolbar" aria-label="Annotation tools">' + bar + '</div><button type="button" class="sl-ink-tab" id="slInkTab" data-ink="showbar" title="Show the drawing tools" aria-label="Show the drawing tools" hidden>&#8250;</button>');
@@ -1120,6 +1122,7 @@
     g.setTransform(d * x.s, 0, 0, d * x.s, d * x.ox, d * x.oy); g.lineCap = "round"; g.lineJoin = "round";
     (SL.show.ink[SL.show.idx] || []).forEach(function (s) {
       if (s.st) { inkStamp(g, s); return; }
+      if (s.tx != null) { inkText(g, s); return; }
       g.globalAlpha = s.hl ? 0.38 : 1; g.strokeStyle = s.c; g.lineWidth = s.w; g.beginPath();
       s.p.forEach(function (q, i) { if (i) g.lineTo(q[0], q[1]); else g.moveTo(q[0], q[1]); });
       if (s.p.length === 1) g.lineTo(s.p[0][0] + 0.01, s.p[0][1]);
@@ -1133,7 +1136,7 @@
     g.strokeStyle = s.c || stampColor(s.st); g.lineWidth = STAMP_LW; g.lineCap = "round"; g.lineJoin = "round"; g.stroke(new Path2D(k.d)); g.restore();
   }
   function inkTool(t) {
-    var sh = SL.show; if (!sh) return; sh.tool = sh.tool === t ? null : t; inkCur = null;
+    var sh = SL.show; if (!sh) return; inkTxCommit(); sh.tool = sh.tool === t ? null : t; inkCur = null;
     var cv = $("#slInk"); cv.className = "sl-ink" + (sh.tool ? " on tool-" + sh.tool : "");
     var L = $("#slLaser"); if (L) L.hidden = true;
     $$("#slInkBar [data-ink]").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-ink") === sh.tool); });
@@ -1141,6 +1144,7 @@
   function inkColor(c) {
     var sh = SL.show; if (!sh) return; sh.col = c;
     $$("#slInkBar [data-ink-col]").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-ink-col") === c); });
+    if (sh.tool === "text") { if (txEd) { txEd.c = c; inkTxStyle(); txEd.ta.focus(); } return; }
     if (sh.tool !== "pen" && sh.tool !== "hl") inkTool("pen");
   }
   function inkDown(e) {
@@ -1148,6 +1152,7 @@
     if (this.setPointerCapture) { try { this.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } }
     if (sh.tool === "laser") { inkLaser(e); return; }
     var p = inkPt(e);
+    if (sh.tool === "text") { inkTxDown(p); return; }
     if (sh.tool === "erase") { inkCur = "erase"; inkErase(p); return; }
     if (STAMP[sh.tool]) { /* press to place; slide the finger or mouse before letting go to fine-tune the spot */
       var sl = sh.ink[sh.idx] || (sh.ink[sh.idx] = []); inkCur = { st: sh.tool, c: stampColor(sh.tool), x: 0, y: 0 }; inkSpot(inkCur, p); sl.push(inkCur); inkRedraw(); return;
@@ -1159,26 +1164,101 @@
     var sh = SL.show; if (!sh || !sh.tool) return;
     if (sh.tool === "laser") { inkLaser(e); return; }
     if (!inkCur) return; var p = inkPt(e);
+    if (inkCur.mv) { inkTxDrag(p); return; }
     if (inkCur === "erase") inkErase(p); else if (inkCur.st) { inkSpot(inkCur, p); inkRedraw(); } else { inkCur.p.push(p); inkRedraw(); }
   }
-  function inkUp() { inkCur = null; }
+  function inkUp() {
+    var c = inkCur; inkCur = null;
+    if (c && c.mv) { if (!c.moved) inkTxOpen(c.mv, null); else if (txEd) txEd.ta.focus(); return; }
+    if (txEd && SL.show && SL.show.tool === "text") { var t = txEd.ta; setTimeout(function () { try { t.focus(); } catch (x) { /* ignore */ } }, 0); }
+  }
   function inkSpot(st, p) { st.x = Math.max(0, Math.min(W * PX, p[0])); st.y = Math.max(0, Math.min(H * PX, p[1])); }
   function inkErase(p) {
     var sh = SL.show, l = sh.ink[sh.idx]; if (!l || !l.length) return; var r = 16 / inkXf().s;
-    var keep = l.filter(function (s) { if (s.st) return Math.hypot(s.x - p[0], s.y - p[1]) >= r + STAMP_SIZE / 2; return !s.p.some(function (q) { return Math.hypot(q[0] - p[0], q[1] - p[1]) < r + s.w / 2; }); });
+    var keep = l.filter(function (s) { if (s.tx != null) return !(p[0] >= s.x - r && p[0] <= s.x + s.w + r && p[1] >= s.y - r && p[1] <= s.y + s.h + r); if (s.st) return Math.hypot(s.x - p[0], s.y - p[1]) >= r + STAMP_SIZE / 2; return !s.p.some(function (q) { return Math.hypot(q[0] - p[0], q[1] - p[1]) < r + s.w / 2; }); });
     if (keep.length !== l.length) { sh.ink[sh.idx] = keep; inkRedraw(); }
   }
   function inkLaser(e) { var L = $("#slLaser"); if (!L) return; L.hidden = false; L.style.left = e.clientX + "px"; L.style.top = e.clientY + "px"; }
-  function inkUndo() { var sh = SL.show; if (!sh) return; var l = sh.ink[sh.idx]; if (l && l.length) { l.pop(); inkRedraw(); } }
-  function inkClear() { var sh = SL.show; if (!sh) return; sh.ink[sh.idx] = []; inkRedraw(); }
+  function inkUndo() { var sh = SL.show; if (!sh) return; if (txEd) { inkTxCancel(); return; } var l = sh.ink[sh.idx]; if (l && l.length) { l.pop(); inkRedraw(); } }
+  function inkClear() { var sh = SL.show; if (!sh) return; inkTxCancel(); sh.ink[sh.idx] = []; inkRedraw(); }
+
+  /* ---- text labels: click to type, drag to move, click a label to edit it. Kept like strokes: per slide, drawn on the same canvas, so they zoom with the slide ---- */
+  var TXS = [28, 36, 48, 64, 88, 120], TX_LH = 1.25, TX_FONT = "system-ui, 'Segoe UI', Roboto, Arial, sans-serif", txEd = null, txMc = null;
+  function txFont(fs) { return "600 " + fs + "px " + TX_FONT; }
+  function txMeasure(s) { /* width and height of a label in slide pixels */
+    if (!txMc) txMc = document.createElement("canvas").getContext("2d");
+    txMc.font = txFont(s.fs); var lines = String(s.tx).split("\n"), w = 0;
+    lines.forEach(function (t) { w = Math.max(w, txMc.measureText(t).width); }); s.w = w; s.h = lines.length * s.fs * TX_LH; return s;
+  }
+  function txHalo(c) { /* a thin outline in the opposite tone, so white or yellow text still reads on a light slide and dark text on a dark one */
+    var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c || ""); if (!m) return "rgba(255,255,255,.85)";
+    var l = (0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16)) / 255; return l > 0.6 ? "rgba(22,24,29,.85)" : "rgba(255,255,255,.9)";
+  }
+  function inkText(g, s) {
+    g.save(); g.globalAlpha = 1; g.font = txFont(s.fs); g.textBaseline = "middle"; g.textAlign = "left"; g.lineJoin = "round"; g.lineWidth = s.fs * 0.14; g.strokeStyle = txHalo(s.c); g.fillStyle = s.c;
+    String(s.tx).split("\n").forEach(function (t, i) { var y = s.y + (i + 0.5) * s.fs * TX_LH; g.strokeText(t, s.x, y); g.fillText(t, s.x, y); });
+    g.restore();
+  }
+  function inkTxHit(p) { /* the newest label under the point, or null */
+    var sh = SL.show, l = (sh && sh.ink[sh.idx]) || [], pad = 8 / inkXf().s;
+    for (var i = l.length - 1; i >= 0; i--) { var s = l[i]; if (s.tx != null && p[0] >= s.x - pad && p[0] <= s.x + s.w + pad && p[1] >= s.y - pad && p[1] <= s.y + s.h + pad) return s; }
+    return null;
+  }
+  function inkTxDown(p) {
+    var sh = SL.show; inkTxCommit();
+    var hit = inkTxHit(p); if (hit) { inkCur = { mv: hit, dx: p[0] - hit.x, dy: p[1] - hit.y, moved: false, sx: p[0], sy: p[1] }; return; }
+    inkTxOpen({ tx: "", x: Math.max(0, Math.min(W * PX - 40, p[0])), y: Math.max(0, Math.min(H * PX - TXS[sh.fsi == null ? 2 : sh.fsi] * TX_LH, p[1] - TXS[sh.fsi == null ? 2 : sh.fsi] * TX_LH / 2)), c: sh.col, fs: TXS[sh.fsi == null ? 2 : sh.fsi] }, null);
+  }
+  function inkTxDrag(p) {
+    var c = inkCur, s = c.mv; if (!c.moved && Math.hypot(p[0] - c.sx, p[1] - c.sy) * inkXf().s < 5) return; c.moved = true;
+    s.x = Math.max(0, Math.min(W * PX - Math.min(s.w, W * PX), p[0] - c.dx)); s.y = Math.max(0, Math.min(H * PX - s.h, p[1] - c.dy)); inkRedraw();
+  }
+  function inkTxOpen(s, _) { /* s is a new label (tx "") or an existing one being edited; it leaves the list while the box is open and goes back on commit */
+    var sh = SL.show, root = $("#slShow"); if (!sh || !root) return; inkTxCommit();
+    var list = sh.ink[sh.idx] || (sh.ink[sh.idx] = []), at = list.indexOf(s); if (at >= 0) list.splice(at, 1);
+    var ta = document.createElement("textarea"); ta.className = "sl-tx"; ta.value = s.tx; ta.rows = 1; ta.wrap = "off"; ta.spellcheck = false; ta.setAttribute("aria-label", "Text on the slide"); ta.setAttribute("autocomplete", "off");
+    ["pointerdown", "pointerup", "click", "dblclick", "wheel"].forEach(function (n) { ta.addEventListener(n, function (e) { e.stopPropagation(); }); });
+    ta.addEventListener("input", function () { inkTxStyle(); });
+    ta.addEventListener("keydown", function (e) {
+      e.stopPropagation();
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); inkTxCommit(); }
+      else if (e.key === "Escape") { e.preventDefault(); inkTxCommit(); }
+    });
+    root.appendChild(ta); txEd = { ta: ta, x: s.x, y: s.y, c: s.c, fs: s.fs, idx: sh.idx }; inkRedraw(); inkTxStyle(); ta.focus();
+    if (s.tx) { try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (x) { /* ignore */ } }
+  }
+  function inkTxStyle() { /* size, colour and place of the live box; it matches what will be drawn */
+    if (!txEd) return; var ta = txEd.ta, x = inkXf(), cv = $("#slInk"); if (!cv) return; var r = cv.getBoundingClientRect(), s = x.s, fs = txEd.fs;
+    var lines = ta.value.split("\n"); if (!txMc) txMc = document.createElement("canvas").getContext("2d"); txMc.font = txFont(fs);
+    var w = 0; lines.forEach(function (t) { w = Math.max(w, txMc.measureText(t).width); });
+    ta.style.left = (r.left + x.ox + txEd.x * s) + "px"; ta.style.top = (r.top + x.oy + txEd.y * s) + "px";
+    ta.style.fontSize = (fs * s) + "px"; ta.style.lineHeight = String(TX_LH); ta.style.color = txEd.c;
+    ta.style.width = (Math.max(fs * 2.5, w + fs * 0.6) * s) + "px"; ta.style.height = (lines.length * fs * TX_LH * s) + "px";
+    var hl = txHalo(txEd.c), b = Math.max(1, fs * s * 0.06); ta.style.textShadow = "0 0 " + b + "px " + hl + ",0 0 " + b + "px " + hl + ",0 0 " + b + "px " + hl;
+  }
+  function inkTxPlace() { if (txEd) inkTxStyle(); }
+  function inkTxSize(d) {
+    var sh = SL.show; if (!sh) return; var i = Math.max(0, Math.min(TXS.length - 1, (sh.fsi == null ? 2 : sh.fsi) + d));
+    sh.fsi = i; if (txEd) { txEd.fs = TXS[i]; inkTxStyle(); txEd.ta.focus(); } else if (sh.tool !== "text") inkTool("text");
+    var m = $('#slInkBar [data-ink="tsm"]'), g = $('#slInkBar [data-ink="tlg"]'); if (m) m.disabled = i <= 0; if (g) g.disabled = i >= TXS.length - 1;
+  }
+  function inkTxClose() { var e = txEd; txEd = null; if (e && e.ta.parentNode) e.ta.parentNode.removeChild(e.ta); return e; }
+  function inkTxCommit() { /* keeps what was typed; an empty box leaves nothing behind */
+    if (!txEd) return; var e = inkTxClose(), sh = SL.show, v = e.ta.value.replace(/\s+$/, "");
+    if (sh && v) { var l = sh.ink[e.idx] || (sh.ink[e.idx] = []); l.push(txMeasure({ tx: v, x: e.x, y: e.y, c: e.c, fs: e.fs })); }
+    inkRedraw();
+  }
+  function inkTxCancel() { /* drops what was typed in the open box; a label that was being edited is gone with it */
+    if (!txEd) return; inkTxClose(); inkRedraw();
+  }
   function toggleFs() { var el = $("#slShow"); if (!el) return; if (document.fullscreenElement) document.exitFullscreen(); else enterFs(el); }
   function onShowClick(e) {
-    if (e.target.closest("[data-aud]")) return;
+    if (e.target.closest("[data-aud]") || e.target.closest(".sl-tx")) return;
     var vb = e.target.closest("[data-vid]"); if (vb) { toggleVideo(vb.getAttribute("data-vid")); return; }
     if (e.target.closest(".sl-video")) return; /* the video's own controls handle the click; it never advances the slide */
     if (e.target.closest(".sl-wid")) { widClick(e); return; }
     var ik = e.target.closest("[data-ink]"), ic = e.target.closest("[data-ink-col]");
-    if (ik) { var ia = ik.getAttribute("data-ink"); if (ia === "hide" || ia === "showbar") { inkHidden = ia === "hide"; inkBarApply(); return; } if (ia === "timer" || ia === "dice") { widToggle(ia); return; } if (ia === "undo") inkUndo(); else if (ia === "clear") inkClear(); else inkTool(ia); return; }
+    if (ik) { var ia = ik.getAttribute("data-ink"); if (ia === "hide" || ia === "showbar") { inkHidden = ia === "hide"; inkBarApply(); return; } if (ia === "timer" || ia === "dice") { widToggle(ia); return; } if (ia === "undo") inkUndo(); else if (ia === "clear") inkClear(); else if (ia === "tsm" || ia === "tlg") inkTxSize(ia === "tlg" ? 1 : -1); else inkTool(ia); return; }
     if (ic) { inkColor(ic.getAttribute("data-ink-col")); return; }
     if (e.target.closest(".sl-ink-bar") || e.target.closest(".sl-ink-tab")) return;
     var b = e.target.closest("[data-sh]");
