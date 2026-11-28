@@ -1445,24 +1445,57 @@
     var pays = S.payments.filter(function (p) { return p.student_id === s.id; });
     var next = upcoming[0];
     var dueBox = s.payment_due ? '<div class="paydue" role="alert"><b>Payment due</b><span>Your new level' + (s.payment_due_note ? " (" + esc(s.payment_due_note) + ")" : "") + ' has not been paid yet. Please pay by InstaPay and send your receipt to your teacher on WhatsApp so your lessons stay active.</span></div>' : "";
-    return '<div style="margin-top:20px;display:grid;gap:22px">' + joinBanner(s) + dueBox +
-      '<div class="sum" style="margin:0"><div><span class="label">Hello</span><b>' + esc(s.full_name.split(" ")[0]) + '</b></div><div><span class="label">Your level</span><b>' + esc(s.level_code || s.cefr || "To be tested") + '</b></div><div><span class="label">Next lesson</span><b style="font-size:17px">' + (next ? esc(fmtDT(next.starts_at)) + "</b><small>Egypt time</small>" + (viewTz() !== EG ? "<small>" + converted(next.starts_at) + "</small>" : "") : "Not scheduled yet</b>") + "</div></div>" +
-      studentHomework(s) +
-      '<div class="panel"><div class="sec"><h3>Your lessons</h3><div class="f" style="max-width:360px"><label for="vtz">Show lessons in my time zone</label><select id="vtz" data-change="viewtz">' + tzOptions(viewTz()) + '</select></div><p class="hint">Lessons are set in Egypt time.</p><div class="cards">' + (upcoming.concat(past).length ? upcoming.concat(past).map(function (l) {
-        return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " Egypt time · " + l.duration_min + ' min</span><span class="pill' + (l.status === "completed" ? " ok" : "") + '">' + esc(LSTATUS[l.status]) + "</span></div>" + (converted(l.starts_at) ? converted(l.starts_at) : "") + lessonFiles(l) +
-          (l.topic ? '<span class="hint">' + esc(l.topic) + "</span>" : "") + (l.summary ? "<p>" + esc(l.summary) + "</p>" : "") +
-          (l.meeting_url && l.status === "scheduled" ? '<div class="acts"><a class="btn sm" href="' + esc(l.meeting_url) + '" target="_blank" rel="noopener">Join lesson</a></div>' : "") + "</div>";
-      }).join("") : '<p class="hint">Your lessons will appear here once they are scheduled.</p>') + "</div>" +
-      '<p class="hint">To move a lesson, message the academy at least 24 hours before it starts. <a href="' + WHATSAPP + '" target="_blank" rel="noopener">WhatsApp the academy</a>.</p></div>' +
-      (window.CLEAR_SL ? window.CLEAR_SL.studentCards(sArg && sArg.id) : "") + (window.CLEAR_MK ? window.CLEAR_MK.studentCard(sArg && sArg.id) : "") + '<div class="sec"><h3>Your materials</h3><div class="cards">' + (S.materials.filter(function (m) { return m.student_id === s.id; }).map(function (m) { return materialRow(m, false); }).join("") || '<p class="hint">Slides and handouts from your lessons will appear here.</p>') + "</div></div>" +
-      (pkgs.length ? '<div class="sec"><h3>Your package</h3><div class="cards">' + pkgs.map(function (p) {
+    /* the page is split into tabs, so nothing is buried under a long scroll: Home shows what is next, the rest has its own place */
+    var mine = S.assignments.filter(function (x) { return x.student_id === s.id; }), todo = mine.filter(function (x) { return x.status === "assigned"; }).length;
+    var mats = S.materials.filter(function (m) { return m.student_id === s.id; });
+    var slidesHTML = (window.CLEAR_SL ? window.CLEAR_SL.studentCards(sArg && sArg.id) : "") + (window.CLEAR_MK ? window.CLEAR_MK.studentCard(sArg && sArg.id) : "");
+    var owes = !!s.payment_due || pkgs.some(function (p) { return (p.status === "pending" || p.status === "active") && !pkgIsPaid(p); });
+    var lessonCard = function (l) {
+      return '<div class="card"><div class="l1"><span class="t">' + esc(fmtDT(l.starts_at)) + " Egypt time · " + l.duration_min + ' min</span><span class="pill' + (l.status === "completed" ? " ok" : "") + '">' + esc(LSTATUS[l.status]) + "</span></div>" + (converted(l.starts_at) ? converted(l.starts_at) : "") + lessonFiles(l) +
+        (l.topic ? '<span class="hint">' + esc(l.topic) + "</span>" : "") + (l.summary ? "<p>" + esc(l.summary) + "</p>" : "") +
+        (l.meeting_url && l.status === "scheduled" ? '<div class="acts"><a class="btn sm" href="' + esc(l.meeting_url) + '" target="_blank" rel="noopener">Join lesson</a></div>' : "") + "</div>";
+    };
+    var go = function (tab, label) { return '<button type="button" class="linkbtn" data-act="stab" data-v="' + tab + '">' + label + "</button>"; };
+    var tabs = [["home", "Home", 0, 0], ["lessons", "Lessons", upcoming.length, 0]];
+    if (mine.length) tabs.push(["homework", "Homework", todo, todo > 0]);
+    tabs.push(["files", "Slides and files", 0, 0]);
+    if (reps.length) tabs.push(["reports", "Reports", reps.length, 0]);
+    if (pkgs.length || pays.length || owes) tabs.push(["billing", "Package and receipts", 0, owes]);
+    if (!sArg) tabs.push(["account", "Account", 0, 0]);
+    if (UI.ssid !== s.id) { UI.ssid = s.id; UI.stab = "home"; }
+    var cur = tabs.some(function (t) { return t[0] === UI.stab; }) ? UI.stab : "home";
+    var bar = '<div class="ptabs noprint" role="group" aria-label="Your sections">' + tabs.map(function (t) {
+      return '<button type="button" data-act="stab" data-v="' + t[0] + '" aria-pressed="' + (cur === t[0]) + '">' + t[1] + (t[2] ? ' <span class="cnt">' + t[2] + "</span>" : "") + (t[3] ? ' <span class="dot" title="Needs your attention"></span>' : "") + "</button>";
+    }).join("") + "</div>";
+    var body = "";
+    if (cur === "home") {
+      var soon = upcoming.slice(0, 3);
+      body = (todo ? studentHomework(s, "todo") : "") +
+        '<div class="panel"><div class="sec"><h3>Next lessons</h3><div class="cards">' + (soon.length ? soon.map(lessonCard).join("") : '<p class="hint">Your next lessons will appear here once they are scheduled.</p>') + "</div>" +
+        (upcoming.length > 3 ? go("lessons", "See all " + upcoming.length + " upcoming lessons") : (past.length ? go("lessons", "See past lessons") : "")) + "</div></div>" +
+        (!todo && mine.length ? '<p class="hint">You have no homework to do right now. ' + go("homework", "See your homework") + "</p>" : "");
+    } else if (cur === "lessons") {
+      body = '<div class="panel"><div class="sec"><h3>Your lessons</h3><div class="f" style="max-width:360px"><label for="vtz">Show lessons in my time zone</label><select id="vtz" data-change="viewtz">' + tzOptions(viewTz()) + '</select></div><p class="hint">Lessons are set in Egypt time.</p><div class="cards">' + (upcoming.concat(past).length ? upcoming.concat(past).map(lessonCard).join("") : '<p class="hint">Your lessons will appear here once they are scheduled.</p>') + "</div>" +
+        '<p class="hint">To move a lesson, message the academy at least 24 hours before it starts. <a href="' + WHATSAPP + '" target="_blank" rel="noopener">WhatsApp the academy</a>.</p></div></div>';
+    } else if (cur === "homework") {
+      body = studentHomework(s);
+    } else if (cur === "files") {
+      body = slidesHTML + '<div class="sec"><h3>Your materials</h3><div class="cards">' + (mats.map(function (m) { return materialRow(m, false); }).join("") || '<p class="hint">Slides and handouts from your lessons will appear here.</p>') + "</div></div>";
+    } else if (cur === "reports") {
+      body = '<div><h3 style="margin-bottom:12px">Your reports</h3><div style="display:grid;gap:16px">' + reps.map(function (r) { return reportHTML(r, s); }).join("") + '</div><div class="acts noprint" style="margin-top:12px"><button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></div>';
+    } else if (cur === "billing") {
+      body = (pkgs.length ? '<div class="sec"><h3>Your package</h3><div class="cards">' + pkgs.map(function (p) {
         return '<div class="card"><div class="l1"><span class="t">' + esc(pkgLabel(p)) + '</span><span class="pill ' + (pkgIsPaid(p) ? "ok" : "warn") + '">' + (pkgIsPaid(p) ? "Paid" : "Payment due") + '</span></div><span class="hint">' + pkgUsed(p) + " of " + p.lessons_total + " lessons used" + (p.expires_on ? " · valid until " + esc(p.expires_on) : "") + "</span></div>";
       }).join("") + "</div></div>" : "") +
-      (pays.length ? '<div class="sec"><h3>Your receipts</h3><div class="cards">' + pays.map(function (x) {
-        return '<div class="card"><div class="l1"><span><b>' + money(x.amount, x.currency) + "</b> · " + esc(x.paid_on) + '</span><span class="pills"><span class="pill ok">' + esc(x.receipt_no) + '</span><button type="button" class="btn sec sm" data-act="openreceipt" data-id="' + x.id + '">Open receipt</button></span></div></div>';
-      }).join("") + "</div></div>" : "") + "</div>" +
-      (sArg ? "" : '<div class="panel" style="max-width:520px"><div class="sec"><h3>Sign-in password</h3><p class="hint">Optional. Set a password so you can sign in with your email and password next time. You can change it here whenever you like.</p><form data-form="setpw"><div class="f"><label for="np">New password</label><input id="np" name="password" type="password" minlength="8" autocomplete="new-password" required><span class="hint">At least 8 characters.</span></div><div class="acts" style="margin-top:10px"><button class="btn" type="submit">Save password</button></div></form></div></div>') +
-      (reps.length ? '<div><h3 style="margin-bottom:12px">Your reports</h3><div style="display:grid;gap:16px">' + reps.map(function (r) { return reportHTML(r, s); }).join("") + '</div><div class="acts noprint" style="margin-top:12px"><button type="button" class="btn sm" data-act="print">Print or save as PDF</button></div></div>' : "") + "</div>";
+        (pays.length ? '<div class="sec"><h3>Your receipts</h3><div class="cards">' + pays.map(function (x) {
+          return '<div class="card"><div class="l1"><span><b>' + money(x.amount, x.currency) + "</b> · " + esc(x.paid_on) + '</span><span class="pills"><span class="pill ok">' + esc(x.receipt_no) + '</span><button type="button" class="btn sec sm" data-act="openreceipt" data-id="' + x.id + '">Open receipt</button></span></div></div>';
+        }).join("") + "</div></div>" : "") + (!pkgs.length && !pays.length ? '<p class="hint">Your package and receipts will appear here.</p>' : "");
+    } else if (cur === "account") {
+      body = '<div class="panel" style="max-width:520px"><div class="sec"><h3>Sign-in password</h3><p class="hint">Optional. Set a password so you can sign in with your email and password next time. You can change it here whenever you like.</p><form data-form="setpw"><div class="f"><label for="np">New password</label><input id="np" name="password" type="password" minlength="8" autocomplete="new-password" required><span class="hint">At least 8 characters.</span></div><div class="acts" style="margin-top:10px"><button class="btn" type="submit">Save password</button></div></form></div></div>';
+    }
+    return '<div style="margin-top:20px;display:grid;gap:22px">' + joinBanner(s) + dueBox +
+      '<div class="sum" style="margin:0"><div><span class="label">Hello</span><b>' + esc(s.full_name.split(" ")[0]) + '</b></div><div><span class="label">Your level</span><b>' + esc(s.level_code || s.cefr || "To be tested") + '</b></div><div><span class="label">Next lesson</span><b style="font-size:17px">' + (next ? esc(fmtDT(next.starts_at)) + "</b><small>Egypt time</small>" + (viewTz() !== EG ? "<small>" + converted(next.starts_at) + "</small>" : "") : "Not scheduled yet</b>") + "</div></div>" +
+      bar + '<div class="stab-body" style="display:grid;gap:22px">' + body + "</div></div>";
   }
 
   /* ------------------------------------------------------------ Clear Academic (teacher section) */
@@ -2100,10 +2133,10 @@
   }
 
   /* ---- student side: homework */
-  function studentHomework(s) {
-    var mine = S.assignments.filter(function (a) { return a.student_id === s.id; });
+  function studentHomework(s, only) { /* only "todo": just what still needs doing, for the Home tab */
+    var mine = S.assignments.filter(function (a) { return a.student_id === s.id && (only !== "todo" || a.status === "assigned"); });
     if (!mine.length) return "";
-    return '<div class="panel"><div class="sec"><h3>Your homework</h3><div class="cards">' + mine.map(function (a) {
+    return '<div class="panel"><div class="sec"><h3>' + (only === "todo" ? "Homework to do" : "Your homework") + '</h3><div class="cards">' + mine.map(function (a) {
       var open = a.status !== "reviewed";
       return '<div class="card"><div class="l1"><span class="t">' + esc(a.title) + '</span><span class="pills"><span class="pill ' + (a.status === "reviewed" ? "ok" : a.status === "submitted" ? "warn" : "") + '">' + (a.status === "reviewed" ? "Feedback ready" : a.status === "submitted" ? "Sent, waiting for feedback" : "To do") + "</span>" + (a.due_on ? '<span class="pill">Due ' + esc(a.due_on) + "</span>" : "") + "</span></div>" +
         (a.instructions ? "<p>" + esc(a.instructions) + "</p>" : "") +
@@ -2300,7 +2333,7 @@
   function onClick(e) {
     var b = e.target.closest("[data-act]"); if (!b) return;
     var a = b.getAttribute("data-act"), id = b.getAttribute("data-id"), v = b.getAttribute("data-v");
-    if (previewing() && !/^(go|theme|signout|mk(part|submit)|openreceipt|openfile|print|sl_(show|view))$/.test(a)) { toast("Preview only. Nothing is changed here."); return; }
+    if (previewing() && !/^(go|theme|signout|stab|mk(part|submit)|openreceipt|openfile|print|sl_(show|view))$/.test(a)) { toast("Preview only. Nothing is changed here."); return; }
     if (window.CLEAR_PL && window.CLEAR_PL.click(a, id, v, b)) return;
     if (window.CLEAR_MK && window.CLEAR_MK.click(a, id, v, b)) return;
     if (window.CLEAR_TC && window.CLEAR_TC.click(a, id, v, b)) return;
@@ -2318,6 +2351,7 @@
     if (a === "again") { UI.sent = ""; return renderAuth(); }
     if (a === "paytab") { UI.payTab = v; return render(); }
     if (a === "ptab") { UI.ptab = v; render(); window.scrollTo(0, 0); return; }
+    if (a === "stab") { UI.stab = v; render(); window.scrollTo(0, 0); return; }
     if (a === "fold") { UI.fold = UI.fold || {}; UI.fold[v] = b.getAttribute("aria-expanded") !== "true"; var fy = window.scrollY; render(); window.scrollTo(0, fy); return; }
     if (a === "fetchrate") return updateRateNow(b);
     if (a === "copymsg") { var mt = $("#msgtext"); return copyText(mt ? mt.value : ""); }
