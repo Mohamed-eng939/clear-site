@@ -12,7 +12,8 @@ body.sl-open{overflow:hidden}
 .sl-th.cur{border-color:#E63946}
 .sl-th .sl-n{position:absolute;left:4px;top:3px;z-index:2;font:600 11px/1 var(--display,sans-serif);background:#16181D;color:#fff;border-radius:4px;padding:2px 5px}
 .sl-th .sl-stage{pointer-events:none}
-.sl-thumbs{-webkit-user-select:none;user-select:none}.sl-th.msel{border-color:#2B7FFF;box-shadow:0 0 0 3px rgba(43,127,255,.3)}.sl-th.msel.cur{border-color:#E63946}.sl-th.msel .sl-n{background:#2B7FFF}
+/* no blue text highlight when Shift or double-click is used on the slides; boxes you type in and the teacher notes stay selectable */
+.slapp,.sl-thumbs{-webkit-user-select:none;user-select:none}.slapp input,.slapp textarea,.slapp select,.slapp [contenteditable],.slapp .sl-notes,.slapp .sl-notes *{-webkit-user-select:text;user-select:text}.sl-th.msel{border-color:#2B7FFF;box-shadow:0 0 0 3px rgba(43,127,255,.3)}.sl-th.msel.cur{border-color:#E63946}.sl-th.msel .sl-n{background:#2B7FFF}
 .sl-th[draggable]{cursor:grab}.sl-th.dragging{opacity:.35}
 .sl-th.dbefore::before,.sl-th.dafter::after{content:"";position:absolute;left:0;right:0;height:4px;border-radius:2px;background:#E63946;z-index:3;pointer-events:none}.sl-th.dbefore::before{top:-8px}.sl-th.dafter::after{bottom:-8px}
 .sl-th-acts{display:flex;flex-wrap:wrap;gap:6px}.sl-th-acts .btn{flex:1 1 auto;min-height:32px;padding:5px 8px;font-size:12px}
