@@ -164,7 +164,7 @@
         : '<button type="button" class="btn sm sec" data-sl="edit">Edit</button>') : "") +
       '<button type="button" class="btn sm sec" data-sl="close">Close</button></div></div>';
     var thumbs = '<div class="sl-thumbs" id="slThumbs">' + c.slides.map(function (s, i) {
-      return '<div role="button" tabindex="0" class="sl-th' + (i === c.idx ? " cur" : "") + '" data-sl="goto" data-i="' + i + '" aria-label="Slide ' + (i + 1) + '"><span class="sl-n">' + (i + 1) + '</span><span class="sl-fit">' + stageHTML(s, { assets: c.assets, all: true, edit: edit }) + "</span></div>";
+      return '<div role="button" tabindex="0"' + (edit ? ' draggable="true" title="Drag to move this slide"' : "") + ' class="sl-th' + (i === c.idx ? " cur" : "") + '" data-sl="goto" data-i="' + i + '" aria-label="Slide ' + (i + 1) + '"><span class="sl-n">' + (i + 1) + '</span><span class="sl-fit">' + stageHTML(s, { assets: c.assets, all: true, edit: edit }) + "</span></div>";
     }).join("") + (edit ? '<div class="sl-th-acts"><button type="button" class="btn sm sec" data-sl="addslide">+ Slide</button><button type="button" class="btn sm sec" data-sl="dupslide">Duplicate</button><button type="button" class="btn sm sec" data-sl="up">&uarr;</button><button type="button" class="btn sm sec" data-sl="down">&darr;</button><button type="button" class="btn sm sec" data-sl="delslide">Delete</button></div>' : "") + "</div>";
     var slide = c.slides[c.idx];
     var main = '<div class="sl-main"><div class="sl-canvas" style="width:100%;max-width:1100px;margin:0 auto"><div class="sl-fit" id="slCanvas" data-edit="' + (edit ? 1 : 0) + '">' + stageHTML(slide, { assets: c.assets, all: true, edit: edit, live: !edit }) + "</div></div>" +
@@ -479,6 +479,7 @@
       if (mod && ek === "a") { e.preventDefault(); var all = curSlide().items.map(function (i) { return i.id; }); setSelIds(all); markSel(); redrawProps(); return; }
       if (mod && (ek === "c" || ek === "x") && it) { e.preventDefault(); copyItems(ek === "x"); return; }
     }
+    if (c.mode === "edit" && !it && e.key === "Delete" && !mod && !e.altKey) { e.preventDefault(); delSlide(false); return; } /* nothing selected on the slide: Delete removes the slide itself (Undo brings it back) */
     if (it && c.mode === "edit") {
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); delItem(); return; }
       var st = e.shiftKey ? 0.25 : 0.05, m = { ArrowLeft: ["x", -st], ArrowRight: ["x", st], ArrowUp: ["y", -st], ArrowDown: ["y", st] }[e.key];
@@ -646,7 +647,7 @@
     if (a === "undo") return undo();
     if (a === "addslide") { snap(); var ns = blankSlide("New slide"); c.slides.splice(c.idx + 1, 0, ns); c.idx++; c.sel = null; dirty(); return refreshApp(); }
     if (a === "dupslide") { snap(); var cp = clone(curSlide()); cp.id = "s" + Math.random().toString(36).slice(2, 8); var idm = {}; cp.items.forEach(function (i) { var n = sid(); idm[i.id] = n; i.id = n; }); remapTrig(cp.items, idm, cp.items); c.notes[cp.id] = c.notes[curSlide().id] || ""; c.slides.splice(c.idx + 1, 0, cp); c.idx++; dirty(); return refreshApp(); }
-    if (a === "delslide") { if (c.slides.length < 2) return toast("A deck needs at least one slide."); if (!window.confirm("Delete this slide?")) return; snap(); c.slides.splice(c.idx, 1); c.idx = Math.max(0, c.idx - 1); c.sel = null; dirty(); return refreshApp(); }
+    if (a === "delslide") return delSlide(true);
     if (a === "up" || a === "down") { var j = c.idx + (a === "up" ? -1 : 1); if (j < 0 || j >= c.slides.length) return; snap(); var t = c.slides[c.idx]; c.slides[c.idx] = c.slides[j]; c.slides[j] = t; c.idx = j; dirty(); return refreshApp(); }
     if (a === "addtext" || a === "addbox") { snap(); var it = newItem(a === "addtext" ? "text" : "box"); curSlide().items.push(it); c.sel = it.id; dirty(); redrawCanvas(); return redrawProps(); }
     if (a === "delitem") return delItem();
@@ -656,6 +657,42 @@
     if (a === "color") return setCol(b.getAttribute("data-name"), b.getAttribute("data-v"));
     if (a === "rmaudio") { var s3 = selItem(); if (!s3) return; snap(); s3.src = null; dirty(); redrawCanvas(); return redrawProps(); }
   }
+  function delSlide(ask) {
+    var c = SL.cur; if (!c || c.mode !== "edit") return;
+    if (c.slides.length < 2) return toast("A deck needs at least one slide.");
+    if (ask && !window.confirm("Delete this slide?")) return;
+    snap(); var i = c.idx; c.slides.splice(i, 1); c.idx = Math.min(i, c.slides.length - 1); c.sel = null; dirty(); refreshApp();
+    if (!ask) toast("Slide " + (i + 1) + " deleted. Ctrl+Z or Undo brings it back.");
+  }
+  /* drag a slide in the list to move it before or after another one */
+  var thDrag = null;
+  function thSide(box, th, e) { /* "before" or "after" the slide under the pointer, along the list's own direction */
+    var r = th.getBoundingClientRect(), row = getComputedStyle(box).flexDirection.indexOf("row") === 0;
+    return (row ? e.clientX - r.left < r.width / 2 : e.clientY - r.top < r.height / 2) ? "before" : "after";
+  }
+  function thClear() { $$("#slThumbs .sl-th").forEach(function (t) { t.classList.remove("dbefore", "dafter", "dragging"); }); }
+  document.addEventListener("dragstart", function (e) {
+    var th = e.target.closest && e.target.closest("#slThumbs .sl-th[draggable]"); if (!th || !SL.cur || SL.cur.mode !== "edit") return;
+    thDrag = Number(th.getAttribute("data-i")); th.classList.add("dragging");
+    try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "slide " + (thDrag + 1)); } catch (x) { /* ignore */ }
+  });
+  document.addEventListener("dragover", function (e) {
+    if (thDrag == null) return; var box = $("#slThumbs"); if (!box) return;
+    var th = e.target.closest && e.target.closest("#slThumbs .sl-th"); e.preventDefault();
+    try { e.dataTransfer.dropEffect = "move"; } catch (x) { /* ignore */ }
+    var br = box.getBoundingClientRect(), row = getComputedStyle(box).flexDirection.indexOf("row") === 0; /* near an edge of the list: scroll it */
+    if (row) { if (e.clientX < br.left + 30) box.scrollLeft -= 14; else if (e.clientX > br.right - 30) box.scrollLeft += 14; } else { if (e.clientY < br.top + 40) box.scrollTop -= 16; else if (e.clientY > br.bottom - 40) box.scrollTop += 16; }
+    $$("#slThumbs .sl-th").forEach(function (t) { t.classList.remove("dbefore", "dafter"); });
+    if (th) th.classList.add(thSide(box, th, e) === "before" ? "dbefore" : "dafter");
+  });
+  document.addEventListener("drop", function (e) {
+    if (thDrag == null) return; var c = SL.cur, box = $("#slThumbs"), th = e.target.closest && e.target.closest("#slThumbs .sl-th"), from = thDrag; thDrag = null;
+    e.preventDefault(); if (!c || !box || !th) { thClear(); return; }
+    var to = Number(th.getAttribute("data-i")) + (thSide(box, th, e) === "after" ? 1 : 0); if (from < to) to--; thClear();
+    if (to === from || to < 0 || to >= c.slides.length) return;
+    snap(); var m = c.slides.splice(from, 1)[0]; c.slides.splice(to, 0, m); c.idx = to; c.sel = null; dirty(); refreshApp();
+  });
+  document.addEventListener("dragend", function () { thDrag = null; thClear(); });
   document.addEventListener("keydown", function (e) {
     if ((e.key === "Enter" || e.key === " ") && e.target.classList && e.target.classList.contains("sl-th")) { e.preventDefault(); slAct("goto", e.target); }
   });
